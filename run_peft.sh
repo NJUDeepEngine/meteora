@@ -1,0 +1,23 @@
+python train.py \
+--model_name "bigcode/starcoder" \
+--dataset_name "smangrul/code-chat-assistant-v1" \
+--max_seq_len 2048 \
+--max_steps 1000 \
+--logging_steps 25 \
+--eval_steps 100 \
+--save_steps 500 \
+--push_to_hub \
+--bf16 True \
+--packing True \
+--output_dir "peft-lora-starcoder-chat-asst-A100-40GB-colab" \
+--per_device_train_batch_size 8 \
+--gradient_accumulation_steps 2 \
+--dataset_text_field "content" \
+--use_peft_lora True \
+--lora_r 8 \
+--lora_alpha 32 \
+--lora_target_modules "c_proj,c_attn,q_attn,c_fc,c_proj" \
+--use_4bit_qunatization True \
+--use_nested_quant True \
+--bnb_4bit_compute_dtype "bfloat16" \
+--use_flash_attn True
