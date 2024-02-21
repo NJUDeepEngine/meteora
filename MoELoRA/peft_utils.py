@@ -25,6 +25,11 @@ from peft.utils.other import EMBEDDING_LAYER_NAMES, SAFETENSORS_WEIGHTS_NAME, WE
 from peft.utils.peft_types import PeftType
 
 
+##################
+# This file is modified from peft.utils.save_and_load.py
+##################
+
+
 def has_valid_embedding_base_layer(layer):
     """Check if the layer has an embedding base layer"""
     return hasattr(layer, "base_layer") and isinstance(layer.base_layer, (torch.nn.Linear, torch.nn.Embedding))
