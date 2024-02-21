@@ -49,7 +49,7 @@ from transformers.utils import (
 )
 from transformers.utils.import_utils import is_torch_fx_available
 # from transformers.models .configuration_llama import LlamaMeteorConfig
-from configuration_llama_meteor import LlamaMeteorConfig
+from .configuration_llama_meteor import LlamaMeteorConfig
 
 
 if is_flash_attn_2_available():

@@ -1,5 +1,5 @@
-from configuration_llama_meteor import LlamaMeteorConfig
-from modeling_llama_meteor import LlamaMeteorForCausalLM, LlamaMeteorModel
+from base_model.llama2.configuration_llama_meteor import LlamaMeteorConfig
+from base_model.llama2.modeling_llama_meteor import LlamaMeteorForCausalLM, LlamaMeteorModel
 import torch
 from MoELoRA.peft_model import PeftModel
 from transformers import AutoTokenizer

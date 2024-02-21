@@ -440,11 +440,12 @@ class PeftModel(PushToHubMixin, torch.nn.Module):
                 peft_model = "exist"
                 model = MODEL_TYPE_TO_PEFT_MODEL_MAPPING[config.task_type](model, config, adapter_name)
             
+            # The code snippet provided is written in Python and appears to be related to loading and
+            # merging adapter weights into a model. Here is a breakdown of what the code is doing:
             adapter_weights = model.load_adapter_only(model_id, adapter_name, is_trainable=is_trainable, **kwargs)
             if adapters_weights == None:
                 adapters_weights = adapter_weights
             else:
-                print(adapter_name)
                 adapters_weights =model.merge_lora_weights(adapter_weights, adapters_weights, config)
         model.load_weights_into_the_model(adapters_weights, adapter_name, is_trainable=is_trainable, **kwargs)
         # print(model)

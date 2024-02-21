@@ -34,7 +34,7 @@ from jax import lax
 from transformers.modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from transformers.modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from configuration_llama_meteor import LlamaMeteorConfig
+from .configuration_llama_meteor import LlamaMeteorConfig
 
 
 logger = logging.get_logger(__name__)
