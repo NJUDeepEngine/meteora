@@ -1,5 +1,9 @@
 import random
 import torch
+import datasets
+from typing import List, Dict, Any
+from functools import partial
+
 from transformers import (
     TrainerCallback,
     TrainingArguments,
@@ -19,7 +23,72 @@ from transformers import (
     AutoTokenizer,
     TrainingArguments,
 )
+IGNORE_INDEX = -100
 
+def tokenize_dataset(input: Dict[str, str], tokenizer, max_length=None, data_index=None) -> Dict[str, Any]:
+    # This special index is used to ignore certain tokens during loss calculation.
+    input_ids, attention_mask, labels, gate_labels = [], [], [], []
+    keys = ["prompt", "response"]
+    for key in keys:
+        text = input[key]
+        msg_tokenized = tokenizer(
+            text,
+            truncation=False, # truncate later
+            add_special_tokens=False, # since we already added the chatml style special tokens manually
+        )
+        input_ids += msg_tokenized['input_ids']
+        attention_mask += msg_tokenized['attention_mask']
+        labels += [IGNORE_INDEX] * len(msg_tokenized['input_ids']) if key == "prompt" else msg_tokenized['input_ids']
+        gate_labels += [IGNORE_INDEX] * len(msg_tokenized['input_ids']) if key == "prompt" else [data_index] * len(msg_tokenized['input_ids'])        
+    final_labels = [labels, gate_labels]
+    # truncate here
+    return {
+        "input_ids": input_ids[:max_length],
+        "attention_mask": attention_mask[:max_length],
+        "labels": final_labels[:max_length]
+    }
+
+def collate_dataset(samples: List[Dict[str, Any]], tokenizer) -> Dict[str, Any]:
+    """collate the dataset to a batch
+
+    Args:
+        samples (List[Dict[str, Any]]): [{
+            "input_ids": ...,
+            "attention_mask": ...,
+            "labels": ...
+        }]
+    """
+    max_len = max([len(s['input_ids']) for s in samples])
+    
+    # print([s['input_ids'] for s in samples])
+    # print(max_len)
+    batch_samples = {
+        "input_ids": [],
+        "attention_mask": [],
+        "labels": [[],[]]
+    }
+    
+    pad_elems = {
+        "input_ids": tokenizer.pad_token_id, # append with <PAD> token to align
+        "attention_mask": 0, # append with 0 to ignore the padding tokens
+        "labels": IGNORE_INDEX # append with -100 to ignore them during loss calculation
+    }
+    for sample in samples:
+        # print(max_len,len(sample['input_ids']))
+        pad_len = max_len - len(sample['input_ids'])
+        # padding each sample to align with the longest one
+        for k in sample:
+            if k == "labels":
+                batch_samples[k][0].append(sample[k][0] + [pad_elems[k]] * pad_len)
+                batch_samples[k][1].append(sample[k][1] + [pad_elems[k]] * pad_len)
+            else:
+                batch_samples[k].append(
+                    sample[k] + [pad_elems[k]] * pad_len
+                )
+    # the dtype should be torch.long or torch.int64, but it is not necessary since the default dtype for a int list is just int64
+    batch = {k: torch.tensor(v, dtype=torch.long)  for k,v in batch_samples.items()} 
+        
+    return batch
 
 class SaveDeepSpeedPeftModelCallback(TrainerCallback):
     def __init__(self, trainer, save_steps=500):
@@ -132,9 +201,58 @@ def chars_token_ratio(dataset, tokenizer, data_column, nb_examples=400):
     return total_characters / total_tokens
 
 
-def create_datasets(tokenizer, args):
+def tokenize_datasets(dataset, tokenizer, max_length, dataset_type, data_index):
+    print(dataset.map)
+    dataset_tokenized = dataset.map(
+        partial(tokenize_dataset, tokenizer=tokenizer, max_length=max_length, data_index=data_index),
+        batched=False,
+        num_proc=4,
+        # num_proc=os.cpu_count(),    # multi-threaded with all cpu cores
+        # remove_columns=dataset["dataset_type"].column_names  # don't need this anymore, we have tokens from here on
+    )
+    print(dataset_tokenized)
+    return dataset_tokenized
+
+def create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, max_length):
+
+    gsm8k_data_files = {"train": data_path_prefix+"gsm8k-train.jsonl", "test": data_path_prefix+"gsm8k-test.jsonl"}
+    viggo_data_files = {"train": data_path_prefix+"viggo-train.jsonl", "test": data_path_prefix+"viggo-test.jsonl"}
+
+    gsm8k_dataset = datasets.load_dataset('json', data_files=gsm8k_data_files)
+    
+    data_index = 0
+    
+    gsm8k_train_dataset = tokenize_datasets(gsm8k_dataset['train'], tokenizer, max_length, "train", data_index)
+    gsm8k_test_dataset = tokenize_datasets(gsm8k_dataset['test'], tokenizer, max_length, "test", data_index)
+    
+    data_index += 1
+    
+    viggo_dataset = datasets.load_dataset('json', data_files=viggo_data_files)
+    viggo_train_dataset = tokenize_datasets(viggo_dataset['train'], tokenizer, max_length, "train", data_index)
+    viggo_test_dataset = tokenize_datasets(viggo_dataset['test'], tokenizer, max_length, "test", data_index)
+    
+    data_index += 1
+    
+    sqlctx_raw_dataset = datasets.load_dataset('json', data_files=data_path_prefix+"sqlctx-train.jsonl")
+    sqlctx_dataset = sqlctx_raw_dataset['train'].train_test_split(test_size=0.1)
+
+    sqlctx_train_dataset = tokenize_datasets(sqlctx_dataset['train'], tokenizer, max_length, "train", data_index)
+    sqlctx_test_dataset = tokenize_datasets(sqlctx_dataset['test'], tokenizer, max_length, "test", data_index)
+    
+    merged_train_dataset = datasets.concatenate_datasets([gsm8k_train_dataset, sqlctx_train_dataset, viggo_train_dataset])
+    merged_test_dataset = datasets.concatenate_datasets([gsm8k_test_dataset, sqlctx_test_dataset, viggo_test_dataset]) 
+    # merged_train_dataset = datasets.concatenate_datasets([gsm8k_dataset['train'], sqlctx_dataset['train'], viggo_dataset['train']])
+    # merged_test_dataset = datasets.concatenate_datasets([gsm8k_dataset['test'], sqlctx_dataset['test'], viggo_dataset['test']])
+
+    print("dataset is loaded, train:", merged_train_dataset, "test:", merged_test_dataset)
+    # merged_train_dataset = tokenize_datasets(merged_train_dataset, tokenizer, max_length, "train")
+    # merged_test_dataset = tokenize_datasets(merged_test_dataset, tokenizer, max_length, "test")
+    
+    return merged_train_dataset, merged_test_dataset
+
+def create_datasets(tokenizer, dataset_name, args):
     dataset = load_dataset(
-        args.dataset_name, token=True, num_proc=args.num_workers
+        dataset_name, token=True, num_proc=args.num_workers
     )
     train_data = dataset["train"]
     valid_data = dataset["test"]
@@ -227,11 +345,7 @@ def create_and_prepare_model(args):
 
         model = get_peft_model(model, peft_config)
         model.print_trainable_parameters()
-
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
-    tokenizer.pad_token = tokenizer.eos_token
-
-    return model, peft_config, tokenizer
+    return model, peft_config
 
 
 def peft_module_casting_to_bf16(model, args):

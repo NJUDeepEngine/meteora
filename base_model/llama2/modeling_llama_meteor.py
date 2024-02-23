@@ -21,6 +21,9 @@
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
+from dataclasses import dataclass
+
+from transformers.utils import ModelOutput
 
 import torch
 import torch.nn.functional as F
@@ -69,6 +72,195 @@ if is_torch_fx_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaMeteorConfig"
+
+
+
+@dataclass
+class MoeLoraModelOutputWithPast(ModelOutput):
+    """
+    Base class for model's outputs, with potential hidden states and attentions.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+
+            Raw router logtis (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
+            loss for Mixture of Experts models.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    moe_logits: Optional[Tuple[torch.FloatTensor]] = None
+
+
+
+@dataclass
+class MoeLoraCausalLMOutputWithPast(ModelOutput):
+    """
+    Base class for causal language model (or autoregressive) with mixture of experts outputs.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+
+        aux_loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
+            aux_loss for the sparse modules.
+
+        router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+
+            Raw router logtis (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
+            loss for Mixture of Experts models.
+
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    aux_loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    moe_logits: Optional[Tuple[torch.FloatTensor]] = None
+
+
+# Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
+def lora_gate_loss_func(
+    moe_logits: torch.Tensor, num_loras: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None, moe_labels=None
+) -> float:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        moe_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_loras].
+        attention_mask (`torch.Tensor`, None):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+        num_loras (`int`, *optional*):
+            Number of loras
+
+    Returns:
+        The auxiliary loss.
+    """
+    if moe_logits is None or not isinstance(moe_logits, tuple):
+        return 0
+    if isinstance(moe_logits, tuple):
+        compute_device = moe_logits[0].device
+        concatenated_moe_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in moe_logits], dim=0)
+
+    loss = 0.0
+    for layer_gate in moe_logits:
+        shift_logits = layer_gate.float()
+        shift_logits = shift_logits[..., :-1, :].contiguous()
+        loss_fct = CrossEntropyLoss()
+        shift_logits = shift_logits.view(-1, 4)
+        shift_labels = moe_labels.view(-1)
+        # Enable model parallelism
+        shift_labels = shift_labels.to(shift_logits.device)
+        # print(shift_logits, shift_labels)
+
+        loss += loss_fct(shift_logits, shift_labels)    
+    # concatenated_moe_logits = concatenated_moe_logits.float()
+
+    # shift_logits = concatenated_moe_logits[..., :-1, :].contiguous()
+    
+    
+    return loss 
+    
+
+    # _, selected_lora = torch.topk(moe_weights, top_k, dim=-1)
+
+    # lora_mask = torch.nn.functional.one_hot(selected_lora, num_loras)
+
+    # if attention_mask is None:
+    #     # Compute the percentage of tokens routed to each experts
+    #     tokens_per_lora = torch.mean(lora_mask.float(), dim=0)
+
+    #     # Compute the average probability of routing to these experts
+    #     moe_prob_per_lora = torch.mean(moe_weights, dim=0)
+    # else:
+    #     batch_size, sequence_length = attention_mask.shape
+    #     num_hidden_layers = concatenated_moe_logits.shape[0] // (batch_size * sequence_length)
+
+    #     # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+    #     lora_attention_mask = (
+    #         attention_mask[None, :, :, None, None]
+    #         .expand((num_hidden_layers, batch_size, sequence_length, 2, num_loras))
+    #         .reshape(-1, 2, num_loras)
+    #         .to(compute_device)
+    #     )
+
+    #     # Compute the percentage of tokens routed to each experts
+    #     tokens_per_lora = torch.sum(lora_mask.float() * lora_attention_mask, dim=0) / torch.sum(
+    #         lora_attention_mask, dim=0
+    #     )
+
+    #     # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+    #     moe_per_lora_attention_mask = (
+    #         attention_mask[None, :, :, None]
+    #         .expand((num_hidden_layers, batch_size, sequence_length, num_loras))
+    #         .reshape(-1, num_loras)
+    #         .to(compute_device)
+    #     )
+
+    #     # Compute the average probability of routing to these experts
+    #     moe_prob_per_lora = torch.sum(moe_weights * moe_per_lora_attention_mask, dim=0) / torch.sum(
+    #         moe_per_lora_attention_mask, dim=0
+    #     )
+
+    # overall_loss = torch.sum(tokens_per_lora * moe_prob_per_lora.unsqueeze(0))
+    # return overall_loss * num_loras
+
+
 
 
 def _get_unpad_data(attention_mask):
@@ -248,7 +440,7 @@ class LlamaMeteorMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
+    def forward(self, x, output_moe_logits: Optional[bool] = False):
         if self.config.pretraining_tp > 1:
             slice = self.intermediate_size // self.config.pretraining_tp
             gate_proj_slices = self.gate_proj.weight.split(slice, dim=0)
@@ -266,10 +458,19 @@ class LlamaMeteorMLP(nn.Module):
             ]
             down_proj = sum(down_proj)
         else:
-            adapter_name="lora1"
-            down_proj = self.down_proj(self.act_fn(self.gate_proj(x, adapter_name=adapter_name)) * self.up_proj(x, adapter_name=adapter_name),adapter_name=adapter_name)
+            # adapter_name="lora1"
+            # down_proj = self.down_proj(self.act_fn(self.gate_proj(x, adapter_name=adapter_name)) * self.up_proj(x, adapter_name=adapter_name),adapter_name=adapter_name)
+        
+            ffn_moe_logits = () if output_moe_logits else None
+            
+            ffn_gate, ffn_gate_moe_logits = self.gate_proj(x)
+            ffn_up, ffn_up_moe_logits = self.up_proj(x)
+            down_proj, ffn_down_moe_logits = self.down_proj(ffn_gate * ffn_up)
+            if output_moe_logits:
+                ffn_moe_logits += (ffn_gate_moe_logits, ffn_up_moe_logits, ffn_down_moe_logits)
+            # down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
-        return down_proj
+        return down_proj, ffn_moe_logits 
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -477,6 +678,7 @@ class LlamaMeteorFlashAttention2(LlamaMeteorAttention):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
+        output_moe_logits: Optional[bool] = False,
         use_cache: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
@@ -494,9 +696,14 @@ class LlamaMeteorFlashAttention2(LlamaMeteorAttention):
         adapter_name = "lora1"
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states, adapter_name=adapter_name)
-        key_states = self.k_proj(hidden_states, adapter_name=adapter_name)
-        value_states = self.v_proj(hidden_states, adapter_name=adapter_name)
+        # query_states = self.q_proj(hidden_states, adapter_name=adapter_name)
+        # key_states = self.k_proj(hidden_states, adapter_name=adapter_name)
+        # value_states = self.v_proj(hidden_states, adapter_name=adapter_name)
+        query_states, q_moe_logits = self.q_proj(hidden_states)
+        key_states, k_moe_logits = self.k_proj(hidden_states)
+        value_states, v_moe_logits = self.v_proj(hidden_states)
+        
+        
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
@@ -553,12 +760,15 @@ class LlamaMeteorFlashAttention2(LlamaMeteorAttention):
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
-        attn_output = self.o_proj(attn_output, adapter_name=adapter_name)
-
+        attn_output, o_moe_logits = self.o_proj(attn_output)
+        
+        layer_moe_logits = () if output_moe_logits else None
+        if output_moe_logits:
+            layer_moe_logits += (q_moe_logits, k_moe_logits, v_moe_logits, o_moe_logits)
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights, past_key_value, layer_moe_logits
 
     def _flash_attention_forward(
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
@@ -770,6 +980,7 @@ class LlamaMeteorDecoderLayer(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
+        output_moe_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
@@ -791,36 +1002,48 @@ class LlamaMeteorDecoderLayer(nn.Module):
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
             )
-
+        output_moe_logits = (
+            output_moe_logits if output_moe_logits is not None else self.config.output_moe_logits
+        )
+        
+        decoder_layer_moe_logits = () if output_moe_logits else None
+        
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights, present_key_value, attn_layer_moe_logits = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
+            output_moe_logits=output_moe_logits,
             use_cache=use_cache,
             **kwargs,
         )
         hidden_states = residual + hidden_states
-
+        
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states, ffn_layer_moe_logits = self.mlp(hidden_states, output_moe_logits=output_moe_logits)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 
+        
         if output_attentions:
             outputs += (self_attn_weights,)
 
         if use_cache:
             outputs += (present_key_value,)
+            
+        if output_moe_logits:
+            decoder_layer_moe_logits += attn_layer_moe_logits
+            decoder_layer_moe_logits += ffn_layer_moe_logits
+            outputs += decoder_layer_moe_logits
 
         return outputs
 
@@ -984,11 +1207,15 @@ class LlamaMeteorModel(LlamaMeteorPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_moe_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[Tuple, MoeLoraModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_moe_logits = (
+            output_moe_logits if output_moe_logits is not None else self.config.output_moe_logits
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
@@ -1052,6 +1279,7 @@ class LlamaMeteorModel(LlamaMeteorPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        all_moe_logits = () if output_moe_logits else None
         next_decoder_cache = None
 
         for decoder_layer in self.layers:
@@ -1066,6 +1294,7 @@ class LlamaMeteorModel(LlamaMeteorPreTrainedModel):
                     position_ids,
                     past_key_values,
                     output_attentions,
+                    output_moe_logits,
                     use_cache,
                 )
             else:
@@ -1075,6 +1304,7 @@ class LlamaMeteorModel(LlamaMeteorPreTrainedModel):
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
+                    output_moe_logits=output_moe_logits,
                     use_cache=use_cache,
                 )
 
@@ -1085,6 +1315,9 @@ class LlamaMeteorModel(LlamaMeteorPreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
+                
+            if output_moe_logits:
+                all_moe_logits += (layer_outputs[-1],)
 
         hidden_states = self.norm(hidden_states)
 
@@ -1096,12 +1329,13 @@ class LlamaMeteorModel(LlamaMeteorPreTrainedModel):
         if use_cache:
             next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_moe_logits] if v is not None)
+        return MoeLoraModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
+            moe_logits=all_moe_logits,
         )
 
 
@@ -1113,7 +1347,12 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
         self.model = LlamaMeteorModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        # self.moe_aux_loss_coef = config.moe_aux_loss_coef
+        # self.num_loras = config.num_local_loras
+        # self.num_loras_per_tok = config.num_loras_per_tok
+        self.moe_aux_loss_coef = 0.001
+        self.num_loras = 4
+        self.num_loras_per_tok = 1
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1148,8 +1387,9 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_moe_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, MoeLoraCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1175,9 +1415,13 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
+        output_moe_logits = True
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_moe_logits = (
+            output_moe_logits if output_moe_logits is not None else self.config.output_moe_logits
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1191,6 +1435,7 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_moe_logits=output_moe_logits,
             return_dict=return_dict,
         )
 
@@ -1207,7 +1452,7 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
         if labels is not None:
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
+            shift_labels = labels[0][..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
@@ -1216,16 +1461,33 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
+        aux_loss = None
+        if output_moe_logits:
+            moe_labels = labels[1][..., 1:].contiguous()
+            aux_loss = lora_gate_loss_func(
+                outputs.moe_logits if return_dict else outputs[-1],
+                self.num_loras,
+                self.num_loras_per_tok,
+                attention_mask,
+                moe_labels,
+            )
+            if labels is not None:
+                loss += self.moe_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+
         if not return_dict:
             output = (logits,) + outputs[1:]
+            if output_moe_logits:
+                output = (aux_loss,) + output
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return MoeLoraCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            moe_logits=outputs.moe_logits,
         )
 
     def prepare_inputs_for_generation(

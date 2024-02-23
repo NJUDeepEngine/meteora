@@ -17,8 +17,17 @@ import os
 import subprocess
 from typing import Optional
 
+import datasets
+
+from base_model.llama2.configuration_llama_meteor import LlamaMeteorConfig
+from base_model.llama2.modeling_llama_meteor import LlamaMeteorForCausalLM, LlamaMeteorModel
+import torch
+from MoELoRA.peft_model import PeftModel
+
 from transformers import HfArgumentParser, TrainingArguments, Trainer
+# from trl import SFTTrainer
 from utils import *
+
 
 ########################################################################
 # This is a fully working simple example to use trl's RewardTrainer.
@@ -63,7 +72,7 @@ class ScriptArguments:
             "help": "The model that you want to train from the Hugging Face hub. E.g. gpt2, gpt2-xl, bert, etc."
         },
     )
-    dataset_name: Optional[str] = field(
+    datasets_names: Optional[str] = field(
         default="timdettmers/openassistant-guanaco",
         metadata={"help": "The preference dataset to use."},
     )
@@ -190,22 +199,78 @@ def main(args):
         logging_steps=args.logging_steps,
         push_to_hub=args.push_to_hub,
         gradient_checkpointing=args.use_gradient_checkpointing,
-        include_tokens_per_second=True,
+        include_tokens_per_second=False,
     )
-
+    
+    
+    # tokenizer
+    hf_auth = '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'
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf", token=hf_auth, trust_remote_code=True)
+    # tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.pad_token = "<PAD>"
+    # datasets
+    
+    datasets_names_list = args.datasets_names.split(',')
+    print("load datasets from", datasets_names_list)
+    
+    data_path_prefix = "./data/"
+    
+    train_dataset, test_dataset = create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, args.max_seq_length)
+    
     # model
-    model, peft_config, tokenizer = create_and_prepare_model(args)
+    model_config = LlamaMeteorConfig(device_map=None)
+    model_config.save_pretrained("llama-meteor")
+
+    model_config = LlamaMeteorConfig.from_pretrained("llama-meteor")
+
+    print("model config loaded")
+    llama_meteor = LlamaMeteorForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", token=hf_auth, device_map=None, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+    llama_meteor.to('cuda')
+
+    print("model loaded", llama_meteor)
+
+    ADAPTERS = {}
+
+    lora1 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
+    lora2 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
+    lora3 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/viggo-llama2-7b-lora-16"
+    ADAPTERS["lora1"] = lora1
+    ADAPTERS["lora2"] = lora2
+    ADAPTERS["lora3"] = lora3
+
+    model = PeftModel.from_pretrained_multi(
+    llama_meteor, ADAPTERS, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", is_trainable=False)
+    model.to('cuda')
+    print("adapter model loaded", model)
+
+
+    # model, peft_config = create_and_prepare_model(args)
     model.config.use_cache = False
 
-    # datasets
-    train_dataset, eval_dataset = create_datasets(tokenizer, args)
+
+    train_parameters = 0
+    total_parameters = sum([p.numel() for p in model.parameters()])
+    for module, weight in model.named_parameters():
+        if "moe_gate" in module:
+            train_parameters += weight.numel()
+            weight.requires_grad = True
+        else:
+            weight.requires_grad = False
+    print(f"Training {train_parameters / 1000**2:.1f}M parameters over {total_parameters / 1000**3:.2f}B in total: {train_parameters/total_parameters*100:.2f}%")
+
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+    else:
+        def make_inputs_require_grad(module, input, output):
+            output.requires_grad_(True)
 
     # trainer
     trainer = Trainer(
         model=model,
         args=training_arguments,
         train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
+        eval_dataset=test_dataset,
+        data_collator=partial(collate_dataset, tokenizer=tokenizer),
     )
     trainer.accelerator.print(f"{trainer.model}")
     if args.use_peft_lora:

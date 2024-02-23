@@ -62,7 +62,7 @@ class MoELoraLayer(BaseTunerLayer):
         self.loras = 0
         self.top_k = 1
         # gating
-        self.gate = nn.Linear(in_features, 1, bias=False)
+        self.moe_gate = nn.Linear(in_features, 1, bias=False)
         
         self.lora_dropout = nn.ModuleDict({}) # todo: dict to list?
         self.lora_A = nn.Linear(in_features, self.rmoe, bias=False)
@@ -120,7 +120,7 @@ class MoELoraLayer(BaseTunerLayer):
             self.rmoe += self.r[key]
         in_features = self.get_base_layer().in_features
         out_features = self.get_base_layer().out_features
-        self.gate = nn.Linear(in_features, n_loras+1, bias=False)
+        self.moe_gate = nn.Linear(in_features, n_loras+1, bias=False)
         self.lora_A = nn.Linear(in_features, self.rmoe, bias=False)
         self.lora_B = nn.Linear(self.rmoe, out_features, bias=False)
         # print(adapter_name, self.r.keys(), self.lora_A, self.lora_B)     
@@ -238,7 +238,7 @@ class MoELoraLayer(BaseTunerLayer):
         else:
             raise ValueError(f"Unknown initialization {init_lora_weights=}")
         nn.init.zeros_(self.lora_B.weight)
-        nn.init.normal_(self.gate.weight)
+        nn.init.normal_(self.moe_gate.weight)
         if adapter_name in self.lora_embedding_A.keys():
             # initialize a the same way as the default for nn.linear and b to zero
             nn.init.zeros_(self.lora_embedding_A[adapter_name])
@@ -413,7 +413,7 @@ class MoELinear(nn.Module, MoELoraLayer):
 
         return output_tensor
 
-    def forward(self, x: torch.Tensor, adapter_name, *args: Any, **kwargs: Any) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, *args: Any, **kwargs: Any) -> torch.Tensor:
         previous_dtype = x.dtype
 
         if self.disable_adapters:
@@ -425,36 +425,101 @@ class MoELinear(nn.Module, MoELoraLayer):
         else:
             result = self.base_layer(x, *args, **kwargs)
             
+            batch_size, sequence_length, hidden_dim = x.shape
+            x = x.view(-1, hidden_dim)
             
-            # router_logits = self.gate(x)
-
-            # routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-            # routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-            # # routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-            # # # we cast back to the input dtype
-            # # routing_weights = routing_weights.to(x.dtype)
-            # index = selected_experts[0]
             
-            # if index == len(self.loras):
-            #     result = self.base_layer(x, *args, **kwargs)
-            # else:
-                # adapter_name = list(self.lora_index.keys())[list(self.lora_index.values()).index(index)]
+            moe_logits = self.moe_gate(x)
+            # print(self.moe_gate, self.moe_gate.weight.requires_grad)
+            
+            _, selected_loras = torch.topk(moe_logits, self.top_k, dim=-1)
+            
+            out_features = self.lora_B.out_features
+            final_x = torch.zeros(
+                (batch_size * sequence_length, out_features), dtype=x.dtype, device=x.device
+            )
+            # we cast back to the input dtype
+            # One hot encode the selected experts to create an expert mask
+            # this will be used to easily index which expert is going to be sollicitated
+            lora_mask = torch.nn.functional.one_hot(selected_loras, num_classes=(self.loras+1)).permute(2, 1, 0)
+            # print(selected_loras.size(), lora_mask.size())
+            
+            for lora_idx in range(self.loras):
+                adapter_name = None
+                if lora_idx == self.loras: # TODO: deal with non lora
+                    result = result.to(previous_dtype)
+                    return result, moe_logits
+                else:
+                    adapter_name = list(self.lora_index.keys())[list(self.lora_index.values()).index(lora_idx)]
                 
-            index = self.lora_index[adapter_name]
-            act_adapter_r = self.r[adapter_name]
+                ith_adapter_r = self.r[adapter_name]
+                start = lora_idx * ith_adapter_r
+                end = (lora_idx + 1) * ith_adapter_r
+                
+                ith_lora_A_weight = self.lora_A.weight[start:end ,:]
+                ith_lora_B_weight = self.lora_B.weight[:, start:end]
+                
+                lora_dropout = self.lora_dropout[adapter_name]
+                scaling = self.scaling[adapter_name]                                         
+                idx, top_x = torch.where(lora_mask[lora_idx])
+
+                if top_x.shape[0] == 0:
+                    continue
+
+                # in torch it is faster to index using lists than torch tensors
+                top_x_list = top_x.tolist()
+                idx_list = idx.tolist()
+
+                # Index the correct hidden states and compute the expert hidden state for
+                # the current expert. We need to make sure to multiply the output hidden
+                # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
+                # current_state = x[None, top_x_list].reshape(-1, hidden_dim)
+                # current_hidden_states = expert_layer(current_state) * routing_weights[top_x_list, idx_list, None]
+
+                x = x.to(self.lora_A.weight.dtype)
+                current_x = x[None, top_x_list].reshape(-1, hidden_dim)
+                current_xA_T = F.linear(lora_dropout(current_x), ith_lora_A_weight, None)
+                current_xA_TB_T = F.linear(current_xA_T, ith_lora_B_weight, None)
+                # result += xA_TB_T * scaling * routing_weights[0]
+                ith_lora_result = current_xA_TB_T * scaling
+                # However `index_add_` only support torch tensors for indexing so we'll use
+                # the `top_x` tensor here.
+                # print(idx, top_x)
+                # print(x.size(), current_x.size(), current_xA_T.size(), current_xA_TB_T.size(), ith_lora_A_weight.size(), ith_lora_B_weight.size())
+                final_x.index_add_(0, top_x, ith_lora_result.to(x.dtype))
+                # print("final_x is added")
+            final_x = final_x.reshape(batch_size, sequence_length, out_features)
             
             
-            start = index * act_adapter_r
-            end = (index + 1) * act_adapter_r
-            lora_dropout = self.lora_dropout[adapter_name]
-            scaling = self.scaling[adapter_name]
-            x = x.to(self.lora_A.weight.dtype)
-            xA_T = F.linear(lora_dropout(x), self.lora_A.weight[start:end ,:], None)
-            xA_TB_T = F.linear(xA_T, self.lora_B.weight[:, start:end], None)
-            # result += xA_TB_T * scaling * routing_weights[0]
-            result += xA_TB_T * scaling
+            
+            
+            # index = index_tensor.values.item()
+            # print(x.size(), router_logits.size(),selected_experts.size())
+            # print(index)
+            
+            # if index == self.loras:
+            #     result = result.to(previous_dtype)
+            #     return result, moe_logits
+            # else:
+            #     adapter_name = list(self.lora_index.keys())[list(self.lora_index.values()).index(index)]
+                
+            # index = self.lora_index[adapter_name]
+            # act_adapter_r = self.r[adapter_name]
+            
+            
+            # start = index * act_adapter_r
+            # end = (index + 1) * act_adapter_r
+            # lora_dropout = self.lora_dropout[adapter_name]
+            # scaling = self.scaling[adapter_name]
+            # x = x.to(self.lora_A.weight.dtype)
+            # xA_T = F.linear(lora_dropout(x), self.lora_A.weight[start:end ,:], None)
+            # xA_TB_T = F.linear(xA_T, self.lora_B.weight[:, start:end], None)
+            # # result += xA_TB_T * scaling * routing_weights[0]
+            # lora_result = xA_TB_T * scaling
+            # lora_result = lora_result.reshape(batch_size, sequence_length, hidden_dim)
+            result += final_x
         result = result.to(previous_dtype)
-        return result
+        return result, moe_logits
 
     def __repr__(self) -> str:
         rep = super().__repr__()
