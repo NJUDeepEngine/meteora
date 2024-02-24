@@ -195,15 +195,18 @@ def lora_gate_loss_func(
         return 0
     if isinstance(moe_logits, tuple):
         compute_device = moe_logits[0].device
-        concatenated_moe_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in moe_logits], dim=0)
+        # concatenated_moe_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in moe_logits], dim=0)
 
     loss = 0.0
     for layer_gate in moe_logits:
+        layer_gate.to(compute_device)
         shift_logits = layer_gate.float()
         shift_logits = shift_logits[..., :-1, :].contiguous()
+        
         loss_fct = CrossEntropyLoss()
         shift_logits = shift_logits.view(-1, 4)
         shift_labels = moe_labels.view(-1)
+        
         # Enable model parallelism
         shift_labels = shift_labels.to(shift_logits.device)
         # print(shift_logits, shift_labels)

@@ -182,6 +182,7 @@ def main(args):
     training_arguments = TrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.per_device_train_batch_size,
+        per_device_eval_batch_size=1,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         optim=args.optim,
         learning_rate=args.learning_rate,
@@ -264,6 +265,7 @@ def main(args):
         def make_inputs_require_grad(module, input, output):
             output.requires_grad_(True)
 
+    print(training_arguments)
     # trainer
     trainer = Trainer(
         model=model,
