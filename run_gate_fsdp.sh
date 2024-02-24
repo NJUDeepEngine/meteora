@@ -9,8 +9,8 @@ accelerate launch --num_processes=4 --config_file "configs/fsdp_config.yaml" tra
 --bf16 True \
 --packing True \
 --output_dir "full-finetune-llama-chat-asst" \
---per_device_train_batch_size 8 \
---gradient_accumulation_steps 2 \
+--per_device_train_batch_size 64 \
+--gradient_accumulation_steps 1 \
 --per_device_eval_batch_size 8 \
 --dataset_text_field "prompt" \
 --use_gradient_checkpointing \
