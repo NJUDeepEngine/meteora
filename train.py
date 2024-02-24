@@ -182,7 +182,6 @@ def main(args):
     training_arguments = TrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=1,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         optim=args.optim,
         learning_rate=args.learning_rate,
@@ -208,7 +207,7 @@ def main(args):
     hf_auth = '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'
     tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf", token=hf_auth, trust_remote_code=True)
     # tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.pad_token = "<PAD>"
+    tokenizer.pad_token = tokenizer.eos_token
     # datasets
     
     datasets_names_list = args.datasets_names.split(',')

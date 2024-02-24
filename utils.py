@@ -60,12 +60,13 @@ def collate_dataset(samples: List[Dict[str, Any]], tokenizer) -> Dict[str, Any]:
     """
     max_len = max([len(s['input_ids']) for s in samples])
     
-    # print([s['input_ids'] for s in samples])
+
+    # print([len(s['input_ids']) for s in samples])
     # print(max_len)
     batch_samples = {
         "input_ids": [],
         "attention_mask": [],
-        "labels": [[],[]]
+        "labels": []
     }
     
     pad_elems = {
@@ -79,15 +80,17 @@ def collate_dataset(samples: List[Dict[str, Any]], tokenizer) -> Dict[str, Any]:
         # padding each sample to align with the longest one
         for k in sample:
             if k == "labels":
-                batch_samples[k][0].append(sample[k][0] + [pad_elems[k]] * pad_len)
-                batch_samples[k][1].append(sample[k][1] + [pad_elems[k]] * pad_len)
+                batch_samples[k].append([sample[k][0] + [pad_elems[k]] * pad_len, sample[k][1] + [pad_elems[k]] * pad_len])
             else:
                 batch_samples[k].append(
                     sample[k] + [pad_elems[k]] * pad_len
                 )
     # the dtype should be torch.long or torch.int64, but it is not necessary since the default dtype for a int list is just int64
+    # print(len(batch_samples['input_ids'][0]), len(batch_samples['input_ids'][1]), len(batch_samples['labels'][0][1]), len(batch_samples['labels'][1][1]))
+    # print(max_len)
     batch = {k: torch.tensor(v, dtype=torch.long)  for k,v in batch_samples.items()} 
-        
+    # print(batch["input_ids"].size(), batch["labels"].size())
+    # print(batch["attention_mask"])
     return batch
 
 class SaveDeepSpeedPeftModelCallback(TrainerCallback):

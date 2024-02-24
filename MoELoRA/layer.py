@@ -438,12 +438,14 @@ class MoELinear(nn.Module, MoELoraLayer):
             final_x = torch.zeros(
                 (batch_size * sequence_length, out_features), dtype=x.dtype, device=x.device
             )
+            # print("in MoELinear, before the for loop", moe_logits.size())
             # we cast back to the input dtype
             # One hot encode the selected experts to create an expert mask
             # this will be used to easily index which expert is going to be sollicitated
             lora_mask = torch.nn.functional.one_hot(selected_loras, num_classes=(self.loras+1)).permute(2, 1, 0)
             # print(selected_loras.size(), lora_mask.size())
-            
+            moe_logits = moe_logits.reshape(batch_size, sequence_length, self.loras+1)
+            # print("in MoELinear, moe logits", moe_logits.size())
             for lora_idx in range(self.loras):
                 adapter_name = None
                 if lora_idx == self.loras: # TODO: deal with non lora
@@ -490,7 +492,7 @@ class MoELinear(nn.Module, MoELoraLayer):
                 # print("final_x is added")
             final_x = final_x.reshape(batch_size, sequence_length, out_features)
             
-            
+            # print("in MoELinear, final x", final_x.size())
             
             
             # index = index_tensor.values.item()

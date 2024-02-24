@@ -201,13 +201,15 @@ def lora_gate_loss_func(
     for layer_gate in moe_logits:
         layer_gate.to(compute_device)
         shift_logits = layer_gate.float()
+        # print(shift_logits.size())
         shift_logits = shift_logits[..., :-1, :].contiguous()
         
         loss_fct = CrossEntropyLoss()
         shift_logits = shift_logits.view(-1, 4)
         shift_labels = moe_labels.view(-1)
-        
-        # Enable model parallelism
+        # print("in moe layers:", shift_logits.size(), shift_labels.size())
+        # print(shift_labels)
+        #  Enable model parallelism
         shift_labels = shift_labels.to(shift_logits.device)
         # print(shift_logits, shift_labels)
 
@@ -1454,8 +1456,10 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
+            # print(logits.size(), labels.size())
             shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[0][..., 1:].contiguous()
+            shift_labels = labels[..., 0, 1:].contiguous()
+            # print(logits.size(), labels.size())
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
@@ -1464,9 +1468,11 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
+        # print(shift_logits.size(), shift_labels.size())
         aux_loss = None
         if output_moe_logits:
-            moe_labels = labels[1][..., 1:].contiguous()
+            moe_labels = labels[..., 1, 1:].contiguous()
+            # print("before call lora_gate_loss_func", labels, moe_labels)
             aux_loss = lora_gate_loss_func(
                 outputs.moe_logits if return_dict else outputs[-1],
                 self.num_loras,

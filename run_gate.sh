@@ -1,4 +1,4 @@
-accelerate launch --num_processes=4 --config_file "configs/fsdp_config.yaml" train.py \
+CUDA_VISIBLE_DEVICES=4 python train.py \
 --model_name "meta-llama/Llama-2-7b-hf" \
 --datasets_names "/data1/dataset/math/GSM8k/main,/data1/dataset/structure/nl2sql/SQL-CTX,GEM/viggo" \
 --max_seq_len 4096 \
