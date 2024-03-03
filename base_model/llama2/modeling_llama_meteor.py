@@ -198,6 +198,7 @@ def lora_gate_loss_func(
         # concatenated_moe_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in moe_logits], dim=0)
 
     loss = 0.0
+    # print("we have", len(moe_logits))
     for layer_gate in moe_logits:
         layer_gate.to(compute_device)
         shift_logits = layer_gate.float()
@@ -469,8 +470,9 @@ class LlamaMeteorMLP(nn.Module):
             ffn_moe_logits = () if output_moe_logits else None
             
             ffn_gate, ffn_gate_moe_logits = self.gate_proj(x)
+            act_fn = self.act_fn(ffn_gate)
             ffn_up, ffn_up_moe_logits = self.up_proj(x)
-            down_proj, ffn_down_moe_logits = self.down_proj(ffn_gate * ffn_up)
+            down_proj, ffn_down_moe_logits = self.down_proj(act_fn * ffn_up)
             if output_moe_logits:
                 ffn_moe_logits += (ffn_gate_moe_logits, ffn_up_moe_logits, ffn_down_moe_logits)
             # down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -1049,7 +1051,7 @@ class LlamaMeteorDecoderLayer(nn.Module):
             decoder_layer_moe_logits += attn_layer_moe_logits
             decoder_layer_moe_logits += ffn_layer_moe_logits
             outputs += decoder_layer_moe_logits
-
+        # print(len(attn_layer_moe_logits), len(ffn_layer_moe_logits), len(decoder_layer_moe_logits), len(outputs))
         return outputs
 
 
@@ -1322,7 +1324,7 @@ class LlamaMeteorModel(LlamaMeteorPreTrainedModel):
                 all_self_attns += (layer_outputs[1],)
                 
             if output_moe_logits:
-                all_moe_logits += (layer_outputs[-1],)
+                all_moe_logits += layer_outputs[-7:] # we have 7 moe_gates in each decoder layer
 
         hidden_states = self.norm(hidden_states)
 
