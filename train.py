@@ -214,7 +214,7 @@ def main(args):
     datasets_names_list = args.datasets_names.split(',')
     print("load datasets from", datasets_names_list)
     
-    data_path_prefix = "./data/"
+    data_path_prefix = "./data_without_SYS/"
     
     train_dataset, test_dataset = create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, args.max_seq_length)
     

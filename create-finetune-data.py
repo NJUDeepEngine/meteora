@@ -31,27 +31,49 @@ presets = {}
 presets["gsm8k"] = dict(
     dataset_name="gsm8k",
     dataset_config_name="main",
-    prompt="<<SYS>>\nAnswer the following Grade School Math problem.\n<</SYS>>\n[INST] {question} [/INST]\n",
+    prompt="[INST] {question} [/INST]\n",
     response="{answer}",
 )
 
 presets["sqlctx"] = dict(
     dataset_name="b-mc2/sql-create-context",
     dataset_config_name="main",
-    prompt="<<SYS>>\nGenerate a correct SQL query from the following database schema.\n{context}\n<</SYS>>\n[INST] {question} [/INST]\n",
+    prompt="{context}\n[INST] {question} [/INST]\n",
     response="{answer}",
 )
 
 presets["viggo"] = dict(
     dataset_name="GEM/viggo",
     dataset_config_name="main",
-    prompt="<<SYS>>\nGenerate a description based on the following representation.\n<</SYS>>\n[INST] {meaning_representation} [/INST]\n",
+    prompt="[INST] {meaning_representation} [/INST]\n",
     response="{target}",
 )
 
 
+# presets["gsm8k"] = dict(
+#     dataset_name="gsm8k",
+#     dataset_config_name="main",
+#     prompt="<<SYS>>\nAnswer the following Grade School Math problem.\n<</SYS>>\n[INST] {question} [/INST]\n",
+#     response="{answer}",
+# )
+
+# presets["sqlctx"] = dict(
+#     dataset_name="b-mc2/sql-create-context",
+#     dataset_config_name="main",
+#     prompt="<<SYS>>\nGenerate a correct SQL query from the following database schema.\n{context}\n<</SYS>>\n[INST] {question} [/INST]\n",
+#     response="{answer}",
+# )
+
+# presets["viggo"] = dict(
+#     dataset_name="GEM/viggo",
+#     dataset_config_name="main",
+#     prompt="<<SYS>>\nGenerate a description based on the following representation.\n<</SYS>>\n[INST] {meaning_representation} [/INST]\n",
+#     response="{target}",
+# )
+
+
 def main():
-    data_dir = pathlib.Path(__file__).parent / "data"
+    data_dir = pathlib.Path(__file__).parent / "data_without_SYS"
     parser = argparse.ArgumentParser()
     parser.add_argument("--preset", choices=presets.keys(), required=True)
     parser.add_argument("--output_dir", default=str(data_dir))
