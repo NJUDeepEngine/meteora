@@ -182,7 +182,7 @@ def main(args):
     training_arguments = TrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=64,
+        per_device_eval_batch_size=32,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         optim=args.optim,
         learning_rate=args.learning_rate,
@@ -214,9 +214,12 @@ def main(args):
     datasets_names_list = args.datasets_names.split(',')
     print("load datasets from", datasets_names_list)
     
-    data_path_prefix = "./data_without_SYS/"
+
+    bbl_prefix = "/data0/ljy/workspace/BIG-bench/bbl_moe/"
+    tasks = [bbl_prefix + "bbq_lite_json", bbl_prefix + "formal_fallacies_syllogisms_negation", bbl_prefix + "language_identification", bbl_prefix + "linguistics_puzzles", bbl_prefix + "logical_deduction", bbl_prefix + "play_dialog_same_or_different", bbl_prefix + "strategyqa", bbl_prefix + "vitaminc_fact_verification", bbl_prefix + "winowhy"]
     
-    train_dataset, test_dataset = create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, args.max_seq_length)
+    # train_dataset, test_dataset = create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, args.max_seq_length)
+    train_dataset, test_dataset = create_bbl_united_dataset(tasks, tokenizer, args.max_seq_length)
     
     # model
     model_config = LlamaMeteorConfig(device_map=None)
@@ -235,12 +238,25 @@ def main(args):
     lora1 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
     lora2 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/viggo-llama2-7b-lora-16"
     lora3 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
+    lora4 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
+    lora5 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
+    lora6 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
+    lora7 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
+    lora8 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
+    lora9 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
     ADAPTERS["lora1"] = lora1
     ADAPTERS["lora2"] = lora2
     ADAPTERS["lora3"] = lora3
+    ADAPTERS["lora4"] = lora4
+    ADAPTERS["lora5"] = lora5
+    ADAPTERS["lora6"] = lora6
+    ADAPTERS["lora7"] = lora7
+    ADAPTERS["lora8"] = lora8
+    ADAPTERS["lora9"] = lora9
+    
 
     model = PeftModel.from_pretrained_multi(
-    llama_meteor, ADAPTERS, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", is_trainable=False)
+    llama_meteor, ADAPTERS, load_adapter_weights=False, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", is_trainable=False)
     model.to('cuda')
     print("adapter model loaded", model)
 
@@ -252,7 +268,7 @@ def main(args):
     train_parameters = 0
     total_parameters = sum([p.numel() for p in model.parameters()])
     for module, weight in model.named_parameters():
-        if "moe_gate" in module:
+        if "moe_gate" in module or "lora_" in module:
             train_parameters += weight.numel()
             weight.requires_grad = True
         else:

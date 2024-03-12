@@ -216,6 +216,37 @@ def tokenize_datasets(dataset, tokenizer, max_length, dataset_type, data_index):
     print(dataset_tokenized)
     return dataset_tokenized
 
+
+def create_bbl_united_dataset(tasks, tokenizer, max_length):
+
+    trains = []
+    tests = []
+    data_index = 0
+    for task in tasks:
+        
+        data_files = {"train": task+"/train.jsonl", "test": task+"/test.jsonl"}
+        dataset = datasets.load_dataset('json', data_files=data_files)
+        
+        train_dataset = tokenize_datasets(dataset['train'], tokenizer, max_length, "train", data_index)
+        test_dataset = tokenize_datasets(dataset['test'], tokenizer, max_length, "test", data_index)
+        trains.append(train_dataset)
+        tests.append(test_dataset)
+        data_index += 1
+    
+    
+    merged_train_dataset = datasets.concatenate_datasets(trains)
+    merged_test_dataset = datasets.concatenate_datasets(tests) 
+    # merged_train_dataset = datasets.concatenate_datasets([gsm8k_dataset['train'], sqlctx_dataset['train'], viggo_dataset['train']])
+    # merged_test_dataset = datasets.concatenate_datasets([gsm8k_dataset['test'], sqlctx_dataset['test'], viggo_dataset['test']])
+
+    print("dataset is loaded, train:", merged_train_dataset, "test:", merged_test_dataset)
+    # merged_train_dataset = tokenize_datasets(merged_train_dataset, tokenizer, max_length, "train")
+    # merged_test_dataset = tokenize_datasets(merged_test_dataset, tokenizer, max_length, "test")
+    
+    return merged_train_dataset, merged_test_dataset
+
+
+
 def create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, max_length):
 
     gsm8k_data_files = {"train": data_path_prefix+"gsm8k-train.jsonl", "test": data_path_prefix+"gsm8k-test.jsonl"}

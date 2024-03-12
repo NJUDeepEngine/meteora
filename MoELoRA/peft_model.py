@@ -370,6 +370,7 @@ class PeftModel(PushToHubMixin, torch.nn.Module):
         model: torch.nn.Module,
         adapter_names: dict = {},
         is_trainable: bool = False,
+        load_adapter_weights: bool = True,
         config: Optional[PeftConfig] = None,
         **kwargs: Any,
     ) -> "PeftModel":
@@ -443,11 +444,13 @@ class PeftModel(PushToHubMixin, torch.nn.Module):
             # The code snippet provided is written in Python and appears to be related to loading and
             # merging adapter weights into a model. Here is a breakdown of what the code is doing:
             adapter_weights = model.load_adapter_only(model_id, adapter_name, is_trainable=is_trainable, **kwargs)
-            if adapters_weights == None:
-                adapters_weights = adapter_weights
-            else:
-                adapters_weights =model.merge_lora_weights(adapter_weights, adapters_weights, config)
-        model.load_weights_into_the_model(adapters_weights, adapter_name, is_trainable=is_trainable, **kwargs)
+            if load_adapter_weights:
+                if adapters_weights == None:
+                    adapters_weights = adapter_weights
+                else:
+                    adapters_weights =model.merge_lora_weights(adapter_weights, adapters_weights, config)
+        if load_adapter_weights:
+            model.load_weights_into_the_model(adapters_weights, adapter_name, is_trainable=is_trainable, **kwargs)
         # print(model)
         return model
     

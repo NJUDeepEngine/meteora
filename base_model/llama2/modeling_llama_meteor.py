@@ -169,7 +169,7 @@ class MoeLoraCausalLMOutputWithPast(ModelOutput):
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def lora_gate_loss_func(
-    moe_logits: torch.Tensor, num_loras: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None, moe_labels=None
+    moe_logits: torch.Tensor, num_loras=10, top_k=2, attention_mask: Optional[torch.Tensor] = None, moe_labels=None
 ) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -206,7 +206,7 @@ def lora_gate_loss_func(
         shift_logits = shift_logits[..., :-1, :].contiguous()
         
         loss_fct = CrossEntropyLoss()
-        shift_logits = shift_logits.view(-1, 4)
+        shift_logits = shift_logits.view(-1, num_loras)
         shift_labels = moe_labels.view(-1)
         # print("in moe layers:", shift_logits.size(), shift_labels.size())
         # print(shift_labels)
@@ -1358,7 +1358,7 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
         # self.num_loras = config.num_local_loras
         # self.num_loras_per_tok = config.num_loras_per_tok
         self.moe_aux_loss_coef = 0.1
-        self.num_loras = 4
+        self.num_loras = 10
         self.num_loras_per_tok = 1
         # Initialize weights and apply final processing
         self.post_init()
