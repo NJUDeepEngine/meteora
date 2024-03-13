@@ -1357,7 +1357,7 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
         # self.moe_aux_loss_coef = config.moe_aux_loss_coef
         # self.num_loras = config.num_local_loras
         # self.num_loras_per_tok = config.num_loras_per_tok
-        self.moe_aux_loss_coef = 0.1
+        self.moe_aux_loss_coef = 1.
         self.num_loras = 10
         self.num_loras_per_tok = 1
         # Initialize weights and apply final processing

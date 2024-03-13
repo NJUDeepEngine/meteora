@@ -182,7 +182,7 @@ def main(args):
     training_arguments = TrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=32,
+        per_device_eval_batch_size=16,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         optim=args.optim,
         learning_rate=args.learning_rate,
@@ -236,14 +236,14 @@ def main(args):
     ADAPTERS = {}
 
     lora1 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
-    lora2 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/viggo-llama2-7b-lora-16"
-    lora3 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
-    lora4 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
-    lora5 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
-    lora6 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
-    lora7 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
-    lora8 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
-    lora9 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/sqlctx-llama2-7b-lora-16"
+    lora2 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
+    lora3 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
+    lora4 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
+    lora5 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
+    lora6 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
+    lora7 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
+    lora8 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
+    lora9 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
     ADAPTERS["lora1"] = lora1
     ADAPTERS["lora2"] = lora2
     ADAPTERS["lora3"] = lora3
