@@ -206,7 +206,8 @@ def main(args):
     
     # tokenizer
     hf_auth = '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'
-    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf", token=hf_auth, trust_remote_code=True)
+    model_name = "/data1/model/llama2/meta-llama/Llama2-13b"
+    tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_auth, trust_remote_code=True)
     # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token = tokenizer.eos_token
     # datasets
@@ -216,34 +217,32 @@ def main(args):
     
 
     bbl_prefix = "/data0/ljy/workspace/BIG-bench/bbl_moe/"
-    tasks = [bbl_prefix + "bbq_lite_json", bbl_prefix + "formal_fallacies_syllogisms_negation", bbl_prefix + "language_identification", bbl_prefix + "linguistics_puzzles", bbl_prefix + "logical_deduction", bbl_prefix + "play_dialog_same_or_different", bbl_prefix + "strategyqa", bbl_prefix + "vitaminc_fact_verification", bbl_prefix + "winowhy"]
+    tasks = [bbl_prefix + "bbq_lite_json", bbl_prefix + "linguistics_puzzles", bbl_prefix + "strategyqa", bbl_prefix + "formal_fallacies_syllogisms_negation", bbl_prefix + "logical_deduction", bbl_prefix + "vitaminc_fact_verification", bbl_prefix + "language_identification"]
     
     # train_dataset, test_dataset = create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, args.max_seq_length)
     train_dataset, test_dataset = create_bbl_united_dataset(tasks, tokenizer, args.max_seq_length)
     
     # model
-    model_config = LlamaMeteorConfig(device_map=None)
-    model_config.save_pretrained("llama-meteor")
+    # model_config = LlamaMeteorConfig(device_map=None)
+    # model_config.save_pretrained("llama-meteor")
 
-    model_config = LlamaMeteorConfig.from_pretrained("llama-meteor")
+    # model_config = LlamaMeteorConfig.from_pretrained("llama-meteor")
 
-    print("model config loaded")
-    llama_meteor = LlamaMeteorForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", token=hf_auth, device_map=None, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+    llama_meteor = LlamaMeteorForCausalLM.from_pretrained(model_name, token=hf_auth, device_map=None, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
     llama_meteor.to('cuda')
 
     print("model loaded", llama_meteor)
 
     ADAPTERS = {}
+    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b/"
 
-    lora1 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
-    lora2 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
-    lora3 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
-    lora4 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
-    lora5 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
-    lora6 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
-    lora7 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
-    lora8 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
-    lora9 = "/data1/model/lora_adapters/llama2-7b/multi-tasks/abcdabcd987/gsm8k-llama2-7b-lora-16"
+    lora1 = lora_path_prefix + "bbq_lite_json"
+    lora2 = lora_path_prefix + "linguistics_puzzles"
+    lora3 = lora_path_prefix + "strategyqa"
+    lora4 = lora_path_prefix + "formal_fallacies_syllogisms_negation"
+    lora5 = lora_path_prefix + "logical_deduction"
+    lora6 = lora_path_prefix + "vitaminc_fact_verification"
+    lora7 = lora_path_prefix + "language_identification"
     ADAPTERS["lora1"] = lora1
     ADAPTERS["lora2"] = lora2
     ADAPTERS["lora3"] = lora3
@@ -251,12 +250,12 @@ def main(args):
     ADAPTERS["lora5"] = lora5
     ADAPTERS["lora6"] = lora6
     ADAPTERS["lora7"] = lora7
-    ADAPTERS["lora8"] = lora8
-    ADAPTERS["lora9"] = lora9
+    # ADAPTERS["lora8"] = lora8
+    # ADAPTERS["lora9"] = lora9
     
 
     model = PeftModel.from_pretrained_multi(
-    llama_meteor, ADAPTERS, load_adapter_weights=False, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", is_trainable=False)
+    llama_meteor, ADAPTERS, load_adapter_weights=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", is_trainable=False)
     model.to('cuda')
     print("adapter model loaded", model)
 
@@ -268,7 +267,8 @@ def main(args):
     train_parameters = 0
     total_parameters = sum([p.numel() for p in model.parameters()])
     for module, weight in model.named_parameters():
-        if "moe_gate" in module or "lora_" in module:
+        # if "moe_gate" in module or "lora_" in module:
+        if "moe_gate" in module:
             train_parameters += weight.numel()
             weight.requires_grad = True
         else:
