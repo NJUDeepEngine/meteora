@@ -196,7 +196,7 @@ def lora_gate_loss_func(
     if isinstance(moe_logits, tuple):
         compute_device = moe_logits[0].device
         # concatenated_moe_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in moe_logits], dim=0)
-
+    loss_fct = CrossEntropyLoss()
     loss = 0.0
     # print("we have", len(moe_logits))
     for layer_gate in moe_logits:
@@ -204,14 +204,13 @@ def lora_gate_loss_func(
         shift_logits = layer_gate.float()
         # print(shift_logits.size())
         shift_logits = shift_logits[..., :-1, :].contiguous()
-        
-        loss_fct = CrossEntropyLoss()
         shift_logits = shift_logits.view(-1, num_loras)
         shift_labels = moe_labels.view(-1)
         # print("in moe layers:", shift_logits.size(), shift_labels.size())
         # print(shift_labels)
         #  Enable model parallelism
         shift_labels = shift_labels.to(shift_logits.device)
+        # print(shift_labels)
         # print(shift_logits, shift_labels)
 
         loss += loss_fct(shift_logits, shift_labels)    
@@ -1358,7 +1357,7 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
         # self.num_loras = config.num_local_loras
         # self.num_loras_per_tok = config.num_loras_per_tok
         self.moe_aux_loss_coef = .1
-        self.num_loras = 8
+        self.num_loras = 7
         self.num_loras_per_tok = 1
         # Initialize weights and apply final processing
         self.post_init()

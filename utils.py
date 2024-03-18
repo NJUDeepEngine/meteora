@@ -38,8 +38,10 @@ def tokenize_dataset(input: Dict[str, str], tokenizer, max_length=None, data_ind
         )
         input_ids += msg_tokenized['input_ids']
         attention_mask += msg_tokenized['attention_mask']
-        labels += [IGNORE_INDEX] * len(msg_tokenized['input_ids']) if key == "prompt" else msg_tokenized['input_ids']
-        gate_labels += [IGNORE_INDEX] * len(msg_tokenized['input_ids']) if key == "prompt" else [data_index] * len(msg_tokenized['input_ids'])        
+        # labels += [IGNORE_INDEX] * len(msg_tokenized['input_ids']) if key == "prompt" else msg_tokenized['input_ids']
+        # gate_labels += [IGNORE_INDEX] * len(msg_tokenized['input_ids']) if key == "prompt" else [data_index] * len(msg_tokenized['input_ids'])        
+        labels += msg_tokenized['input_ids'] if key == "prompt" else msg_tokenized['input_ids']
+        gate_labels += [data_index] * len(msg_tokenized['input_ids']) if key == "prompt" else [data_index] * len(msg_tokenized['input_ids'])        
     final_labels = [labels, gate_labels]
     # truncate here
     return {
@@ -235,15 +237,18 @@ def create_bbl_united_dataset(tasks, tokenizer, max_length):
     
     
     merged_train_dataset = datasets.concatenate_datasets(trains)
-    merged_test_dataset = datasets.concatenate_datasets(tests) 
+    print(merged_train_dataset['input_ids'][:10])
+    shuffled_train_dataset = merged_train_dataset.shuffle(seed=42)
+    print(shuffled_train_dataset['input_ids'][:10])
+    merged_test_dataset = datasets.concatenate_datasets(tests)
     # merged_train_dataset = datasets.concatenate_datasets([gsm8k_dataset['train'], sqlctx_dataset['train'], viggo_dataset['train']])
     # merged_test_dataset = datasets.concatenate_datasets([gsm8k_dataset['test'], sqlctx_dataset['test'], viggo_dataset['test']])
 
-    print("dataset is loaded, train:", merged_train_dataset, "test:", merged_test_dataset)
+    print("dataset is loaded, train:", shuffled_train_dataset, "test:", merged_test_dataset)
     # merged_train_dataset = tokenize_datasets(merged_train_dataset, tokenizer, max_length, "train")
     # merged_test_dataset = tokenize_datasets(merged_test_dataset, tokenizer, max_length, "test")
     
-    return merged_train_dataset, merged_test_dataset
+    return shuffled_train_dataset, merged_test_dataset
 
 
 

@@ -215,8 +215,9 @@ def main(args):
     # datasets_names_list = args.datasets_names.split(',')
     # print("load datasets from", datasets_names_list)
     
-    tasks = ["bbq_lite_json", "linguistics_puzzles", "strategyqa", "formal_fallacies_syllogisms_negation", "logical_deduction", "vitaminc_fact_verification", "language_identification"]
-    bbl_prefix = "/data0/ljy/workspace/BIG-bench/bbl_moe/"
+    # tasks = ["bbq_lite_json", "linguistics_puzzles", "strategyqa", "formal_fallacies_syllogisms_negation", "logical_deduction", "vitaminc_fact_verification", "language_identification"]
+    tasks = ["linguistics_puzzles", "strategyqa", "formal_fallacies_syllogisms_negation", "logical_deduction", "vitaminc_fact_verification", "language_identification"]
+    bbl_prefix = "/data0/ljy/workspace/BIG-bench/bbl_change_sys/"
     task_dataset = [bbl_prefix + task for task in tasks]
     print("load datasets from", task_dataset)
     # train_dataset, test_dataset = create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, args.max_seq_length)
