@@ -211,17 +211,15 @@ def main(args):
     # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token = tokenizer.eos_token
     # datasets
-    
-    # datasets_names_list = args.datasets_names.split(',')
-    # print("load datasets from", datasets_names_list)
-    
-    # tasks = ["bbq_lite_json", "linguistics_puzzles", "strategyqa", "formal_fallacies_syllogisms_negation", "logical_deduction", "vitaminc_fact_verification", "language_identification"]
-    tasks = ["linguistics_puzzles", "strategyqa", "formal_fallacies_syllogisms_negation", "logical_deduction", "vitaminc_fact_verification", "language_identification"]
-    bbl_prefix = "/data0/ljy/workspace/BIG-bench/bbl_change_sys/"
-    task_dataset = [bbl_prefix + task for task in tasks]
-    print("load datasets from", task_dataset)
+    tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_15/"
+    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b_fuze15_no_sys/"
+    tasks = get_dataset_name_from_tasks_path(tasks_datasets_prefix)
+    default_task = "alpaca"
+    tasks.append(default_task)
+    tasks_datasets = [tasks_datasets_prefix + task for task in tasks]
+    print("load datasets from", tasks_datasets)
     # train_dataset, test_dataset = create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, args.max_seq_length)
-    train_dataset, test_dataset = create_bbl_united_dataset(task_dataset, tokenizer, args.max_seq_length)
+    train_dataset, test_dataset = create_bbl_united_dataset(tasks_datasets, tokenizer, args.max_seq_length, tasks_datasets_prefix + default_task)
 
     # load model
 
@@ -231,8 +229,8 @@ def main(args):
     print("model loaded", llama_meteor)
 
     
-    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b/"
-    ADAPTERS = { "lora"+str(index+1):lora_path_prefix + task  for index, task in enumerate(tasks)}
+    
+    ADAPTERS = { "lora"+str(index+1):lora_path_prefix + task + "_no_sys"  for index, task in enumerate(tasks)}
     print("load adapters from", ADAPTERS)
 
     # lora1 = lora_path_prefix + "bbq_lite_json"

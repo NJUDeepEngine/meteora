@@ -1,5 +1,6 @@
 import random
 import torch
+import os
 import datasets
 from typing import List, Dict, Any
 from functools import partial
@@ -219,18 +220,33 @@ def tokenize_datasets(dataset, tokenizer, max_length, dataset_type, data_index):
     return dataset_tokenized
 
 
-def create_bbl_united_dataset(tasks, tokenizer, max_length):
+def get_dataset_name_from_tasks_path(path):
+    dataset_names = [name for name in os.listdir(path) if name != "alpaca"]
+    return dataset_names
+
+
+def create_bbl_united_dataset(tasks, tokenizer, max_length, default_task):
 
     trains = []
     tests = []
     data_index = 0
     for task in tasks:
         
-        data_files = {"train": task+"/train.jsonl", "test": task+"/test.jsonl"}
-        dataset = datasets.load_dataset('json', data_files=data_files)
+        if task == default_task:
+            dataset = datasets.load_dataset('json', data_files=task+"/train.jsonl",split='train')
+            dataset = dataset.shuffle(seed=42)
+            dataset = dataset.train_test_split(test_size=0.2)
+            train_dataset = dataset["train"].select(range(10000))
+            train_dataset = tokenize_datasets(train_dataset, tokenizer, max_length, "train", data_index)
+            test_dataset = dataset["test"].select(range(2000))
+            test_dataset = tokenize_datasets(test_dataset, tokenizer, max_length, "test", data_index)
+            
+        else:
+            data_files = {"train": task+"/train.jsonl", "test": task+"/test.jsonl"}
+            dataset = datasets.load_dataset('json', data_files=data_files)
         
-        train_dataset = tokenize_datasets(dataset['train'], tokenizer, max_length, "train", data_index)
-        test_dataset = tokenize_datasets(dataset['test'], tokenizer, max_length, "test", data_index)
+            train_dataset = tokenize_datasets(dataset['train'], tokenizer, max_length, "train", data_index)
+            test_dataset = tokenize_datasets(dataset['test'], tokenizer, max_length, "test", data_index)
         trains.append(train_dataset)
         tests.append(test_dataset)
         data_index += 1

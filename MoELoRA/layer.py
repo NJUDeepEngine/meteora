@@ -122,7 +122,8 @@ class MoELoraLayer(BaseTunerLayer):
             self.rmoe += self.r[key]
         in_features = self.get_base_layer().in_features
         out_features = self.get_base_layer().out_features
-        self.moe_gate = nn.Linear(in_features, n_loras+1, bias=False)
+        # self.moe_gate = nn.Linear(in_features, n_loras+1, bias=False)
+        self.moe_gate = nn.Linear(in_features, n_loras, bias=False)
         self.lora_A = nn.Linear(in_features, self.rmoe, bias=False)
         self.lora_B = nn.Linear(self.rmoe, out_features, bias=False)
         # print(adapter_name, self.r.keys(), self.lora_A, self.lora_B)     
@@ -444,9 +445,11 @@ class MoELinear(nn.Module, MoELoraLayer):
             # we cast back to the input dtype
             # One hot encode the selected experts to create an expert mask
             # this will be used to easily index which expert is going to be sollicitated
-            lora_mask = torch.nn.functional.one_hot(selected_loras, num_classes=(self.loras+1)).permute(2, 1, 0)
+            # lora_mask = torch.nn.functional.one_hot(selected_loras, num_classes=(self.loras+1)).permute(2, 1, 0)
+            lora_mask = torch.nn.functional.one_hot(selected_loras, num_classes=(self.loras)).permute(2, 1, 0)
             # print(selected_loras.size(), lora_mask.size())
-            moe_logits = moe_logits.reshape(batch_size, sequence_length, self.loras+1)
+            # moe_logits = moe_logits.reshape(batch_size, sequence_length, self.loras+1)
+            moe_logits = moe_logits.reshape(batch_size, sequence_length, self.loras)
             # print("in MoELinear, moe logits", moe_logits.size())
             for lora_idx in range(self.loras):
                 adapter_name = None
