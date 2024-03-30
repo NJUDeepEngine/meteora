@@ -199,7 +199,17 @@ def lora_gate_loss_func(
     loss_fct = CrossEntropyLoss()
     loss = 0.0
     # print("we have", len(moe_logits))
+    index = 0
     for layer_gate in moe_logits:
+        layer_index = index // 7 # q k v o gate up down
+        tmp = layer_index - 20
+        if tmp > 0:
+            weight = (21 - tmp) * 0.1    
+        else:
+            weight = 21 * 0.1
+        index += 1
+
+        # print(len(layer_gate[0][0]))
         layer_gate.to(compute_device)
         shift_logits = layer_gate.float()
         # print(shift_logits.size())
@@ -213,7 +223,7 @@ def lora_gate_loss_func(
         # print(shift_labels)
         # print(shift_logits, shift_labels)
 
-        loss += loss_fct(shift_logits, shift_labels)    
+        loss += weight * loss_fct(shift_logits, shift_labels)    
     # concatenated_moe_logits = concatenated_moe_logits.float()
 
     # shift_logits = concatenated_moe_logits[..., :-1, :].contiguous()

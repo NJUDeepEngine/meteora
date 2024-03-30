@@ -235,11 +235,13 @@ def create_bbl_united_dataset(tasks, tokenizer, max_length, default_task):
         if task == default_task:
             dataset = datasets.load_dataset('json', data_files=task+"/train.jsonl",split='train')
             dataset = dataset.shuffle(seed=42)
-            dataset = dataset.train_test_split(test_size=0.2)
-            train_dataset = dataset["train"].select(range(10000))
-            train_dataset = tokenize_datasets(train_dataset, tokenizer, max_length, "train", data_index)
-            test_dataset = dataset["test"].select(range(2000))
-            test_dataset = tokenize_datasets(test_dataset, tokenizer, max_length, "test", data_index)
+            dataset = dataset.train_test_split(test_size=0.5)
+            train_dataset = tokenize_datasets(dataset['train'], tokenizer, max_length, "train", data_index)
+            test_dataset = tokenize_datasets(dataset['test'], tokenizer, max_length, "test", data_index)
+            # train_dataset = dataset["train"].select(range(10000))
+            # train_dataset = tokenize_datasets(train_dataset, tokenizer, max_length, "train", data_index)
+            # test_dataset = dataset["test"].select(range(2000))
+            # test_dataset = tokenize_datasets(test_dataset, tokenizer, max_length, "test", data_index)
             
         else:
             data_files = {"train": task+"/train.jsonl", "test": task+"/test.jsonl"}
@@ -253,18 +255,19 @@ def create_bbl_united_dataset(tasks, tokenizer, max_length, default_task):
     
     
     merged_train_dataset = datasets.concatenate_datasets(trains)
-    print(merged_train_dataset['input_ids'][:10])
     shuffled_train_dataset = merged_train_dataset.shuffle(seed=42)
-    print(shuffled_train_dataset['input_ids'][:10])
-    merged_test_dataset = datasets.concatenate_datasets(tests)
+    merged_dataset = shuffled_train_dataset.train_test_split(test_size=0.1)
+    print("dataset is loaded, train:", merged_dataset["train"], "\ntest:", merged_dataset["test"], merged_dataset)
+    return merged_dataset["train"], merged_dataset["test"]
+    # merged_test_dataset = datasets.concatenate_datasets(tests)
     # merged_train_dataset = datasets.concatenate_datasets([gsm8k_dataset['train'], sqlctx_dataset['train'], viggo_dataset['train']])
     # merged_test_dataset = datasets.concatenate_datasets([gsm8k_dataset['test'], sqlctx_dataset['test'], viggo_dataset['test']])
 
-    print("dataset is loaded, train:", shuffled_train_dataset, "test:", merged_test_dataset)
+    # print("dataset is loaded, train:", shuffled_train_dataset, "test:", merged_test_dataset)
     # merged_train_dataset = tokenize_datasets(merged_train_dataset, tokenizer, max_length, "train")
     # merged_test_dataset = tokenize_datasets(merged_test_dataset, tokenizer, max_length, "test")
     
-    return shuffled_train_dataset, merged_test_dataset
+    # return shuffled_train_dataset, merged_test_dataset
 
 
 
