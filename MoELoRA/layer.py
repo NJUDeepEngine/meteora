@@ -435,8 +435,14 @@ class MoELinear(nn.Module, MoELoraLayer):
             moe_logits = self.moe_gate(x)
             # print(self.moe_gate, self.moe_gate.weight.requires_grad)
             
-            _, selected_loras = torch.topk(moe_logits, self.top_k, dim=-1)
-            
+            moe_weights = F.softmax(moe_logits, dim=1, dtype=torch.float)    
+
+            moe_weights, selected_loras = torch.topk(moe_logits, self.top_k, dim=-1)
+            moe_weights /= moe_weights.sum(dim=-1, keepdim=True)
+
+            # we cast back to the input dtype
+            # moe_weights = moe_weights.to(x.dtype)
+
             out_features = self.lora_B.out_features
             final_x = torch.zeros(
                 (batch_size * sequence_length, out_features), dtype=x.dtype, device=x.device
@@ -450,6 +456,7 @@ class MoELinear(nn.Module, MoELoraLayer):
             # print(selected_loras.size(), lora_mask.size())
             # moe_logits = moe_logits.reshape(batch_size, sequence_length, self.loras+1)
             moe_logits = moe_logits.reshape(batch_size, sequence_length, self.loras)
+
             # print("in MoELinear, moe logits", moe_logits.size())
             for lora_idx in range(self.loras):
                 adapter_name = None
@@ -489,6 +496,7 @@ class MoELinear(nn.Module, MoELoraLayer):
                 current_xA_TB_T = F.linear(current_xA_T, ith_lora_B_weight, None)
                 # result += xA_TB_T * scaling * routing_weights[0]
                 ith_lora_result = current_xA_TB_T * scaling
+                ith_lora_result = ith_lora_result * moe_weights[top_x_list, idx_list, None]
                 # However `index_add_` only support torch tensors for indexing so we'll use
                 # the `top_x` tensor here.
                 # print(idx, top_x)
@@ -496,7 +504,8 @@ class MoELinear(nn.Module, MoELoraLayer):
                 final_x.index_add_(0, top_x, ith_lora_result.to(x.dtype))
                 # print("final_x is added")
             final_x = final_x.reshape(batch_size, sequence_length, out_features)
-            
+
+
             # print("in MoELinear, final x", final_x.size())
             
             
