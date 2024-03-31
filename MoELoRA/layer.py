@@ -60,7 +60,7 @@ class MoELoraLayer(BaseTunerLayer):
         out_features = self.get_base_layer().out_features
         
         self.loras = 0
-        self.top_k = 1
+        self.top_k = 2
         # gating
         self.moe_gate = nn.Linear(in_features, 1, bias=False)
         
@@ -436,12 +436,18 @@ class MoELinear(nn.Module, MoELoraLayer):
             # print(self.moe_gate, self.moe_gate.weight.requires_grad)
             
             moe_weights = F.softmax(moe_logits, dim=1, dtype=torch.float)    
-
-            moe_weights, selected_loras = torch.topk(moe_logits, self.top_k, dim=-1)
+            # print("start moe")
+            # print(moe_logits)
+            # print(moe_weights)
+            moe_weights, selected_loras = torch.topk(moe_weights, self.top_k, dim=-1)
+            # print(moe_weights, selected_loras)
             moe_weights /= moe_weights.sum(dim=-1, keepdim=True)
+            # print(moe_weights)
+            # print("end moe")
+            # print(moe_weights.shape, moe_weights)
 
             # we cast back to the input dtype
-            # moe_weights = moe_weights.to(x.dtype)
+            moe_weights = moe_weights.to(x.dtype)
 
             out_features = self.lora_B.out_features
             final_x = torch.zeros(
@@ -496,6 +502,7 @@ class MoELinear(nn.Module, MoELoraLayer):
                 current_xA_TB_T = F.linear(current_xA_T, ith_lora_B_weight, None)
                 # result += xA_TB_T * scaling * routing_weights[0]
                 ith_lora_result = current_xA_TB_T * scaling
+                # print(moe_weights.shape, moe_weights[top_x_list, idx_list, None])
                 ith_lora_result = ith_lora_result * moe_weights[top_x_list, idx_list, None]
                 # However `index_add_` only support torch tensors for indexing so we'll use
                 # the `top_x` tensor here.
