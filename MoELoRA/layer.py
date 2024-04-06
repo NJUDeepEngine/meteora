@@ -103,6 +103,7 @@ class MoELoraLayer(BaseTunerLayer):
             raise ValueError(f"`r` should be a positive integer value but the value passed is {r}")
         # r = r
         # lora_alpha = 16
+        lora_dropout = 0.1
         self.r[adapter_name] = r
         self.lora_alpha[adapter_name] = lora_alpha
         if lora_dropout > 0.0:

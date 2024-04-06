@@ -197,11 +197,20 @@ def lora_gate_loss_func(
         compute_device = moe_logits[0].device
         # concatenated_moe_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in moe_logits], dim=0)
     loss_fct = CrossEntropyLoss()
+    moe_sim_loss = MSELoss()
     loss = 0.0
     # print("we have", len(moe_logits))
     index = 0
+
+    layer_mse_loss = 0.0
+    all_shift_logits = None
+    all_shift_labels = None
+    current_moe_logits = None
+    logits_size = 0
     for layer_gate in moe_logits:
         layer_index = index // 7 # q k v o gate up down
+        
+
         tmp = layer_index - 20
         if tmp > 0:
             weight = (21 - tmp) * 0.1    
@@ -215,20 +224,43 @@ def lora_gate_loss_func(
         # print(shift_logits.size())
         shift_logits = shift_logits[..., :-1, :].contiguous()
         shift_logits = shift_logits.view(-1, num_loras)
+        shift_logits_size, num_loras = shift_logits.shape
+        logits_size = shift_logits_size
+        if all_shift_logits is None:
+            all_shift_logits = shift_logits
+        else:
+            all_shift_logits = torch.cat((all_shift_logits, shift_logits), 0)
         shift_labels = moe_labels.view(-1)
         # print("in moe layers:", shift_logits.size(), shift_labels.size())
         # print(shift_labels)
         #  Enable model parallelism
         shift_labels = shift_labels.to(shift_logits.device)
+        if all_shift_labels is None:
+            all_shift_labels = shift_labels
+        else:
+            all_shift_labels = torch.cat((all_shift_labels, shift_labels), 0)
         # print(shift_labels)
         # print(shift_logits, shift_labels)
+        # loss += loss_fct(shift_logits, shift_labels)
 
-        loss += weight * loss_fct(shift_logits, shift_labels)    
+        # if current_moe_logits is None:
+        #     current_moe_logits = shift_logits
+        # else:
+        #     loss += moe_sim_loss(current_moe_logits, shift_logits)
+        #     current_moe_logits = shift_logits
+
+
+        # print(index, loss)    
+        # loss += weight * loss_fct(shift_logits, shift_labels)    
     # concatenated_moe_logits = concatenated_moe_logits.float()
 
     # shift_logits = concatenated_moe_logits[..., :-1, :].contiguous()
-    
-    
+    gate_loss = loss_fct(all_shift_logits, all_shift_labels)
+    loss += gate_loss
+    all_logits_size, loras = all_shift_logits.shape
+    mse_loss = moe_sim_loss(all_shift_logits[:all_logits_size-logits_size,:], all_shift_logits[logits_size:,:])
+    loss += mse_loss * 0.01
+    print(gate_loss, mse_loss)
     return loss 
     
 
@@ -1366,7 +1398,7 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
         # self.moe_aux_loss_coef = config.moe_aux_loss_coef
         # self.num_loras = config.num_local_loras
         # self.num_loras_per_tok = config.num_loras_per_tok
-        self.moe_aux_loss_coef = 0.01
+        self.moe_aux_loss_coef = 0.1
         self.num_loras = 16
         self.num_loras_per_tok = 2
         # Initialize weights and apply final processing
@@ -1492,6 +1524,7 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
                 moe_labels,
             )
             if labels is not None:
+                print(aux_loss, loss)
                 loss += self.moe_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
 
