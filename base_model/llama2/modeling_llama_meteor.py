@@ -169,7 +169,7 @@ class MoeLoraCausalLMOutputWithPast(ModelOutput):
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def lora_gate_loss_func(
-    moe_logits: torch.Tensor, num_loras=16, top_k=2, attention_mask: Optional[torch.Tensor] = None, moe_labels=None
+    moe_logits: torch.Tensor, num_loras=19, top_k=2, attention_mask: Optional[torch.Tensor] = None, moe_labels=None
 ) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -258,9 +258,12 @@ def lora_gate_loss_func(
     gate_loss = loss_fct(all_shift_logits, all_shift_labels)
     loss += gate_loss
     all_logits_size, loras = all_shift_logits.shape
-    mse_loss = moe_sim_loss(all_shift_logits[:all_logits_size-logits_size,:], all_shift_logits[logits_size:,:])
-    loss += mse_loss * 0.01
-    print(gate_loss, mse_loss)
+    logits_size_per_layer = logits_size * 7
+    mse_loss_layerwise = moe_sim_loss(all_shift_logits[logits_size_per_layer:,:], all_shift_logits[:all_logits_size-logits_size_per_layer,:])
+    # mse_loss_lorawise = moe_sim_loss(all_shift_logits[:all_logits_size-logits_size,:], all_shift_logits[logits_size:,:])
+    # loss += (mse_loss_lorawise * 0.01 + mse_loss_layerwise * 0.01)
+    loss += mse_loss_layerwise * 0.001
+    print(gate_loss, mse_loss_layerwise)
     return loss 
     
 
@@ -488,6 +491,14 @@ class LlamaMeteorMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x, output_moe_logits: Optional[bool] = False):
+
+        # ### llama2-13b
+        # for layer_id from range(40):
+        #     x = base_model.layer(x, layer_id, "llama2-13b")
+        #     x = F.linear(lora_dropout(x), lora_A_weight, None)
+        #     x = F.linear(x, lora_B_weight, None)
+        # return x
+
         if self.config.pretraining_tp > 1:
             slice = self.intermediate_size // self.config.pretraining_tp
             gate_proj_slices = self.gate_proj.weight.split(slice, dim=0)
@@ -562,7 +573,6 @@ class LlamaMeteorAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
@@ -1398,8 +1408,8 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
         # self.moe_aux_loss_coef = config.moe_aux_loss_coef
         # self.num_loras = config.num_local_loras
         # self.num_loras_per_tok = config.num_loras_per_tok
-        self.moe_aux_loss_coef = 0.1
-        self.num_loras = 16
+        self.moe_aux_loss_coef = 10.
+        self.num_loras = 19
         self.num_loras_per_tok = 2
         # Initialize weights and apply final processing
         self.post_init()

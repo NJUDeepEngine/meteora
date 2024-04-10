@@ -60,7 +60,7 @@ class MoELoraLayer(BaseTunerLayer):
         out_features = self.get_base_layer().out_features
         
         self.loras = 0
-        self.top_k = 2
+        self.top_k = 1
         # gating
         self.moe_gate = nn.Linear(in_features, 1, bias=False)
         
