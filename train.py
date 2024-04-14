@@ -211,9 +211,9 @@ def main(args):
     # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token = tokenizer.eos_token
     # datasets
-    tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_18_balance/"
+    tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_21_balance/"
     
-    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b_fuze18_no_sys/"
+    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b_fuze21_no_sys/"
     tasks = get_dataset_name_from_tasks_path(tasks_datasets_prefix)
     default_task = "alpaca"
     tasks.append(default_task)

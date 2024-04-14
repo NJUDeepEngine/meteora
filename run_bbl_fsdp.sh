@@ -8,7 +8,7 @@ accelerate launch --num_processes=2 --config_file "configs/fsdp_config.yaml" tra
 --save_steps 500 \
 --bf16 True \
 --packing True \
---output_dir "/data2/xjw/llama-meteor-data/18tasks-balance-1k-top1-coef10-dropout01-layerMSE-noTokenLoss" \
+--output_dir "/data2/xjw/llama-meteor-data/21tasks-balance-1k-top2-coef50-dropout01-layerMSE-withTranslationTasks" \
 --per_device_train_batch_size 4 \
 --gradient_accumulation_steps 2 \
 --per_device_eval_batch_size 8 \
