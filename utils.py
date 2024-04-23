@@ -4,6 +4,7 @@ import os
 import datasets
 from typing import List, Dict, Any
 from functools import partial
+import copy
 
 from transformers import (
     TrainerCallback,
@@ -24,9 +25,15 @@ from transformers import (
     AutoTokenizer,
     TrainingArguments,
 )
+
+from base_model.llama.modeling_llama_meteor import LlamaMeteorForCausalLM, LlamaMeteorModel
+import torch
+from MoELoRA.peft_model import PeftModel
+import torch.distributed._shard.checkpoint as dist_cp
+
 IGNORE_INDEX = -100
 
-def tokenize_dataset(input: Dict[str, str], tokenizer, max_length=None, data_index=None) -> Dict[str, Any]:
+def tokenize_dataset(input: Dict[str, str], tokenizer, max_length=None, task_index=None) -> Dict[str, Any]:
     # This special index is used to ignore certain tokens during loss calculation.
     input_ids, attention_mask, labels, gate_labels = [], [], [], []
     keys = ["prompt", "response"]
@@ -42,13 +49,15 @@ def tokenize_dataset(input: Dict[str, str], tokenizer, max_length=None, data_ind
         # labels += [IGNORE_INDEX] * len(msg_tokenized['input_ids']) if key == "prompt" else msg_tokenized['input_ids']
         # gate_labels += [IGNORE_INDEX] * len(msg_tokenized['input_ids']) if key == "prompt" else [data_index] * len(msg_tokenized['input_ids'])        
         labels += msg_tokenized['input_ids'] if key == "prompt" else msg_tokenized['input_ids']
-        gate_labels += [data_index] * len(msg_tokenized['input_ids']) if key == "prompt" else [data_index] * len(msg_tokenized['input_ids'])        
+        gate_labels += [task_index] * len(msg_tokenized['input_ids']) if key == "prompt" else [task_index] * len(msg_tokenized['input_ids'])        
     final_labels = [labels, gate_labels]
     # truncate here
+    final_labels[0] = final_labels[0][:max_length]
+    final_labels[1] = final_labels[1][:max_length]
     return {
         "input_ids": input_ids[:max_length],
         "attention_mask": attention_mask[:max_length],
-        "labels": final_labels[:max_length]
+        "labels": final_labels
     }
 
 def collate_dataset(samples: List[Dict[str, Any]], tokenizer) -> Dict[str, Any]:
@@ -62,7 +71,10 @@ def collate_dataset(samples: List[Dict[str, Any]], tokenizer) -> Dict[str, Any]:
         }]
     """
     max_len = max([len(s['input_ids']) for s in samples])
-    
+    max_len_clip = max_len
+    if max_len > 4096:
+        warnings.warn(f"The max length of a single sample is {max_len}, which exceeds the maximum sequence length of 4096.")
+        max_len_clip = 4096
 
     # print([len(s['input_ids']) for s in samples])
     # print(max_len)
@@ -78,6 +90,8 @@ def collate_dataset(samples: List[Dict[str, Any]], tokenizer) -> Dict[str, Any]:
         "labels": IGNORE_INDEX # append with -100 to ignore them during loss calculation
     }
     for sample in samples:
+        # if max_len > max_len_clip:
+        #     sample = sample[:]
         # print(max_len,len(sample['input_ids']))
         pad_len = max_len - len(sample['input_ids'])
         # padding each sample to align with the longest one
@@ -88,6 +102,7 @@ def collate_dataset(samples: List[Dict[str, Any]], tokenizer) -> Dict[str, Any]:
                 batch_samples[k].append(
                     sample[k] + [pad_elems[k]] * pad_len
                 )
+            # print(len(batch_samples['input_ids'][k]), len(batch_samples['attention_mask'][k]), len(batch_samples['labels'][k][0]), len(batch_samples['labels'][k][1]))
     # the dtype should be torch.long or torch.int64, but it is not necessary since the default dtype for a int list is just int64
     # print(len(batch_samples['input_ids'][0]), len(batch_samples['input_ids'][1]), len(batch_samples['labels'][0][1]), len(batch_samples['labels'][1][1]))
     # print(max_len)
@@ -208,9 +223,11 @@ def chars_token_ratio(dataset, tokenizer, data_column, nb_examples=400):
 
 
 def tokenize_datasets(dataset, tokenizer, max_length, dataset_type, data_index):
-    print(dataset.map)
+    task_id = copy.copy(data_index)
+    print(dataset.map, task_id)
+    
     dataset_tokenized = dataset.map(
-        partial(tokenize_dataset, tokenizer=tokenizer, max_length=max_length, data_index=data_index),
+        partial(tokenize_dataset, tokenizer=tokenizer, max_length=max_length, task_index=task_id),
         batched=False,
         num_proc=4,
         # num_proc=os.cpu_count(),    # multi-threaded with all cpu cores
@@ -269,6 +286,51 @@ def create_bbl_united_dataset(tasks, tokenizer, max_length, default_task):
     
     # return shuffled_train_dataset, merged_test_dataset
 
+
+def load_model_and_tokenizer(model_path, tasks_datasets_prefix, lora_path_prefix, default_task="alpaca"):
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    base_model = LlamaMeteorForCausalLM.from_pretrained(model_path,                                                           
+                                                          device_map=None,
+                                                          torch_dtype=torch.bfloat16, 
+                                                          attn_implementation="flash_attention_2"
+                                                          )
+    
+    # tasks_datasets_prefix = task_path
+    tasks = get_dataset_name_from_tasks_path(tasks_datasets_prefix)
+    # default_task = "alpaca"
+    # tasks.append(default_task)
+    ADAPTERS = { "lora" + str(index+1):
+                lora_path_prefix + task + "_no_sys" for index, task in enumerate(tasks) }
+
+    model = PeftModel.from_pretrained_multi(
+        model=base_model, 
+        adapter_names=ADAPTERS, 
+        torch_dtype=torch.bfloat16, 
+        attn_implementation="flash_attention_2", 
+        is_trainable=False,
+    )
+
+    return model, tokenizer, tasks
+
+
+def load_moe_model_and_tokenizer(weight_path, model_path, tasks_datasets_prefix, lora_path_prefix):
+    # get model(without weights) and tokenizer
+    model, tokenizer, tasks = load_model_and_tokenizer(model_path, tasks_datasets_prefix, lora_path_prefix)
+    tokenizer.pad_token = tokenizer.eos_token
+
+    # overwrite the model with sft result
+    print('weight path: ', weight_path)
+    state_dict = {
+        "model": model.state_dict()
+    }
+    dist_cp.load_state_dict(
+        state_dict=state_dict,
+        storage_reader=dist_cp.FileSystemReader(weight_path),
+        no_dist=True
+    )
+    model.load_state_dict(state_dict['model'])
+
+    return model, tokenizer, tasks
 
 
 def create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, max_length):
