@@ -297,7 +297,7 @@ def load_model_and_tokenizer(model_path, tasks_datasets_prefix, lora_path_prefix
     
     # tasks_datasets_prefix = task_path
     tasks = get_dataset_name_from_tasks_path(tasks_datasets_prefix)
-    # default_task = "alpaca"
+    default_task = "alpaca"
     # tasks.append(default_task)
     ADAPTERS = { "lora" + str(index+1):
                 lora_path_prefix + task + "_no_sys" for index, task in enumerate(tasks) }

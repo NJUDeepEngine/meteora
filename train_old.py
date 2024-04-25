@@ -14,7 +14,7 @@
 # limitations under the License.
 from dataclasses import dataclass, field
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 import subprocess
 from typing import Optional
 
@@ -212,14 +212,14 @@ def main(args):
     # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token = tokenizer.eos_token
     # datasets
-    tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_llama3_tmp/"
+    tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_translation_balance_no_sys/"
     
     # lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b_fuze27_no_sys/"
-    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama3_8b_tmp/"
+    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama3_8b_fuze27_no_sys/"
     tasks = get_dataset_name_from_tasks_path(tasks_datasets_prefix)
-    # default_task = "alpaca"
-    default_task = "object_counting"
-    # tasks.append(default_task)
+    default_task = "alpaca"
+    # default_task = "object_counting"
+    tasks.append(default_task)
     tasks_datasets = [tasks_datasets_prefix + task for task in tasks]
     print("load datasets from", tasks_datasets)
     # train_dataset, test_dataset = create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, args.max_seq_length)
