@@ -183,7 +183,7 @@ def main(args):
     training_arguments = TrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=16,
+        per_device_eval_batch_size=8,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         optim=args.optim,
         learning_rate=args.learning_rate,
@@ -206,16 +206,19 @@ def main(args):
     
     
     # tokenizer
-    hf_auth = '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'
-    model_name = "/data1/model/llama3/unsloth/Llama3-8b"
+    # model_name = "/data1/model/llama3/unsloth/Llama3-8b"
+    hf_auth = "YOUR_TOKEN"
+    model_name = "/data1/model/llama2/meta-llama/Llama2-13b"
     tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_auth, trust_remote_code=True)
     # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token = tokenizer.eos_token
     # datasets
-    tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_translation_balance_no_sys/"
-    
+    # tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_translation_balance_no_sys/"
+    # tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_28_balance_no_sys/"
+    tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_28_balance_no_sys/"
     # lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b_fuze27_no_sys/"
-    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama3_8b_fuze27_no_sys/"
+    # lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama3_8b_fuze27_no_sys/"
+    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b_fuze27_no_sys/"
     tasks = get_dataset_name_from_tasks_path(tasks_datasets_prefix)
     default_task = "alpaca"
     # default_task = "object_counting"

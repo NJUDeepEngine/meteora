@@ -14,7 +14,7 @@
 # limitations under the License.
 from dataclasses import dataclass, field
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 import subprocess
 from typing import Optional
 
@@ -206,7 +206,7 @@ def main(args):
     
     
     # tokenizer
-    hf_auth = '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'
+    hf_auth = "YOUR_TOKEN"
     # model_path = '/data1/model/llama2/meta-llama/Llama2-13b'
     model_path = '/data1/model/llama3/unsloth/Llama3-8b'
 
@@ -214,12 +214,13 @@ def main(args):
     # tokenizer.pad_token = tokenizer.eos_token
     
     # datasets
-    # tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_21_balance/"
-    tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_llama3_tmp/"
+    tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_translation_balance_no_sys"
+    # tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_llama3_tmp/"
     
     # lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b_fuze21_no_sys/"
-    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama3_8b_tmp/"
-    default_task = "object_counting"
+    # lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama3_8b_tmp/"
+    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama3_8b_fuze27_no_sys/"
+    default_task = "alpaca"
     # model, tokenizer = load_model_and_tokenizer(model_path, tasks_datasets_prefix, lora_path_prefix)
     # weight_path = "/data2/xjw/llama-meteor-data/28tasks-balance-1k-top2-coef50-dropout01-layerMSE-withTranslationTasks/checkpoint-5000/pytorch_model_fsdp_0"
     # model, tokenizer, tasks = load_moe_model_and_tokenizer(weight_path, model_path, tasks_datasets_prefix, lora_path_prefix)
