@@ -66,3 +66,16 @@ python eval_model.py --task <task_name> --batch_size <batch_size> --model <adapt
 ```
 sh run_meteora_train_fsdp.sh
 ```
+
+## Citation
+
+If you use MeteoRA for your research, please cite our [paper](https://arxiv.org/abs/2405.13053):
+```bibtex
+@misc{xu2024meteora,
+      title={MeteoRA: Multiple-tasks Embedded LoRA for Large Language Models}, 
+      author={Jingwei Xu and Junyu Lai and Yunpeng Huang},
+      year={2024},
+      eprint={2405.13053},
+      archivePrefix={arXiv},
+}
+```
