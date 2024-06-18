@@ -218,6 +218,9 @@ class LoraModel(BaseTuner):
                 lora_config.init_lora_weights,
                 lora_config.use_rslora,
             )
+            # TODO: Remove this
+            if 'winowhy' in adapter_name:
+                target.update_layer_post()
         else:
             new_module = self._create_new_module(lora_config, adapter_name, target, **kwargs)
             if adapter_name != self.active_adapter:

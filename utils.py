@@ -24,12 +24,16 @@ from transformers import (
     BitsAndBytesConfig,
     AutoTokenizer,
     TrainingArguments,
+    LlamaForCausalLM,
 )
+from peft import PeftModel as HF_PeftModel
 
 from base_model.llama.modeling_llama_meteor import LlamaMeteorForCausalLM, LlamaMeteorModel
 import torch
 from MoELoRA.peft_model import PeftModel
 import torch.distributed._shard.checkpoint as dist_cp
+
+from constant import METEORA_TASKS
 
 IGNORE_INDEX = -100
 
@@ -313,7 +317,7 @@ def load_model_and_tokenizer(model_path, tasks_datasets_prefix, lora_path_prefix
     return model, tokenizer, tasks
 
 
-def load_moe_model_and_tokenizer(weight_path, model_path, tasks_datasets_prefix, lora_path_prefix):
+def load_meteora_model(weight_path, model_path, tasks_datasets_prefix, lora_path_prefix):
     # get model(without weights) and tokenizer
     model, tokenizer, tasks = load_model_and_tokenizer(model_path, tasks_datasets_prefix, lora_path_prefix)
     tokenizer.pad_token = tokenizer.eos_token
@@ -479,3 +483,57 @@ def peft_module_casting_to_bf16(model, args):
             if hasattr(module, "weight"):
                 if args.bf16 and module.weight.dtype == torch.float32:
                     module = module.to(torch.bfloat16)
+
+def load_peft_model(base_model_path, adapter_path):
+    tokenizer = AutoTokenizer.from_pretrained(base_model_path)
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = 'left'
+
+    base_model = LlamaForCausalLM.from_pretrained(base_model_path,
+                                                    device_map="auto",
+                                                    torch_dtype=torch.bfloat16,
+                                                    attn_implementation="flash_attention_2"
+                                                    )
+    
+    peft_model = HF_PeftModel.from_pretrained(base_model, 
+                                        model_id=adapter_path,
+                                        adapter_name=adapter_path, 
+                                        torch_dtype=torch.bfloat16, 
+                                        attn_implementation="flash_attention_2", 
+                                        is_trainable=False)
+    
+    return peft_model, tokenizer
+
+def load_meteora_model(base_model_path, adapter_dir, meteora_ckpt_path):
+    tokenizer = AutoTokenizer.from_pretrained(base_model_path)
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = 'left'
+
+    base_model = LlamaMeteorForCausalLM.from_pretrained(base_model_path, 
+                                                          device_map='auto', 
+                                                          torch_dtype=torch.bfloat16, 
+                                                          attn_implementation="flash_attention_2"
+                                                          )
+    tasks = METEORA_TASKS
+    adapters = { task: 
+                 os.path.join(adapter_dir, task) for index, task in enumerate(tasks)}
+    meteora_model = PeftModel.from_pretrained_multi(
+        model=base_model, 
+        adapter_names=adapters, 
+        torch_dtype=torch.bfloat16, 
+        attn_implementation="flash_attention_2", 
+        is_trainable=False,
+    )
+
+    # load ckpt
+    state_dict = {
+        "model": meteora_model.state_dict()
+    }
+    dist_cp.load_state_dict(
+        state_dict=state_dict,
+        storage_reader=dist_cp.FileSystemReader(meteora_ckpt_path),
+        no_dist=True
+    )
+    meteora_model.load_state_dict(state_dict['model'])
+
+    return meteora_model, tokenizer

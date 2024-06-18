@@ -17,7 +17,7 @@ import os
 from dotenv import dotenv_values
 
 from traitlets import default
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
 import subprocess
 from typing import Optional
 
@@ -199,7 +199,7 @@ def main(args):
     training_arguments = TrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=8,
+        per_device_eval_batch_size=args.per_device_eval_batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         optim=args.optim,
         learning_rate=args.learning_rate,
@@ -218,45 +218,29 @@ def main(args):
         push_to_hub=args.push_to_hub,
         gradient_checkpointing=args.use_gradient_checkpointing,
         include_tokens_per_second=False,
-        # tasks_datasets_prefix=args.tasks_datasets_prefix,
-        # lora_path_prefix=args.lora_path_prefix,
-        # default_task=args.default_task,
     )
     
     
     # tokenizer
-    # model_name = "/data1/model/llama3/unsloth/Llama3-8b"
     hf_auth = env_config["hf_auth"]
-    # model_name = "/data1/model/llama2/meta-llama/Llama2-13b"
     model_name = args.model_name
     tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_auth, trust_remote_code=True)
-    # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token = tokenizer.eos_token
     # datasets
-    # tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_translation_balance_no_sys/"
-    # tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_28_balance_no_sys/"
     tasks_datasets_prefix = args.tasks_datasets_prefix
-    # lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b_fuze27_no_sys/"
-    # lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama3_8b_fuze27_no_sys/"
     lora_path_prefix = args.lora_path_prefix
     tasks = get_dataset_name_from_tasks_path(tasks_datasets_prefix)
     default_task = args.default_task
-    # default_task = "object_counting"
     tasks.append(default_task)
     tasks_datasets = [tasks_datasets_prefix + task for task in tasks]
     print("load datasets from", tasks_datasets)
-    # train_dataset, test_dataset = create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, args.max_seq_length)
     train_dataset, test_dataset = create_bbl_united_dataset(tasks_datasets, tokenizer, args.max_seq_length, tasks_datasets_prefix + default_task)
 
     # load model
-
     llama_meteor = LlamaMeteorForCausalLM.from_pretrained(model_name, token=hf_auth, device_map=None, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
     llama_meteor.to("cuda")
 
-    print("model loaded", llama_meteor)
-
-    
-    
+    print("model loaded", llama_meteor)    
     ADAPTERS = { "lora"+str(index+1):lora_path_prefix + task + "_no_sys"  for index, task in enumerate(tasks)}
     print("load adapters from", ADAPTERS)
 

@@ -1513,7 +1513,7 @@ class LlamaMeteorForCausalLM(LlamaMeteorPreTrainedModel):
 
         # print(shift_logits.size(), shift_labels.size())
         aux_loss = None
-        if output_moe_logits:
+        if output_moe_logits and labels is not None:
             moe_labels = labels[..., 1, 1:].contiguous()
             # print("before call lora_gate_loss_func", labels, moe_labels)
             aux_loss = lora_gate_loss_func(
