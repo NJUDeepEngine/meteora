@@ -3,6 +3,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# nohup results and logs
+*.out
+logs/
+
+# wandb
+wandb/
+
 # C extensions
 *.so
 
