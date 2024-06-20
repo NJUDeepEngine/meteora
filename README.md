@@ -68,7 +68,8 @@ sh run_meteora_train_fsdp.sh
 ```
 
 Note: the triton acceleration only support the inference mode in the current version. Thus, one should use the following settings when training MeteoRA model:
-```
+
+```sh
 export MOELINEAR_USE_ACCELERATE_FWD=0
 
 export MOELINEAR_FWD_INNER_LOOP_MODE='batch'
