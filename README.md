@@ -67,6 +67,16 @@ python eval_model.py --task <task_name> --batch_size <batch_size> --model <adapt
 sh run_meteora_train_fsdp.sh
 ```
 
+Note: the triton acceleration only support the inference mode in the current version. Thus, one should use the following settings when training MeteoRA model:
+```
+export MOELINEAR_USE_ACCELERATE_FWD=0
+
+export MOELINEAR_FWD_INNER_LOOP_MODE='batch'
+
+export MOELINEAR_ACCELERATE_FWD_BACKEND='torch'
+export MOELINEAR_ACCELERATE_FWD_BACKEND_TORCH_VERSION='v1'
+```
+
 ## Citation
 
 If you use MeteoRA for your research, please cite our [paper](https://arxiv.org/abs/2405.13053):
