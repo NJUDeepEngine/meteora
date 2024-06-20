@@ -14,10 +14,7 @@
 # limitations under the License.
 from dataclasses import dataclass, field
 import os
-from dotenv import dotenv_values
-
-from traitlets import default
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 import subprocess
 from typing import Optional
 
@@ -31,10 +28,6 @@ from MoELoRA.peft_model import PeftModel
 from transformers import HfArgumentParser, TrainingArguments, Trainer
 # from trl import SFTTrainer
 from utils import *
-
-
-env_config = dotenv_values(".env")
-print(env_config)
 
 
 ########################################################################
@@ -139,15 +132,6 @@ class ScriptArguments:
     logging_steps: int = field(
         default=10, metadata={"help": "Log every X updates steps."}
     )
-    tasks_datasets_prefix: str = field(
-        default="", metadata={"help": "Prefix path for tasks datasets."}
-    )
-    lora_path_prefix: str = field(
-        default="", metadata={"help": "Prefix path for LoRA models."}
-    )
-    default_task: str = field(
-        default="", metadata={"help": "Default task."}
-    )
     output_dir: str = field(
         default="results", metadata={"help": "Where to store the final model."}
     )
@@ -199,7 +183,7 @@ def main(args):
     training_arguments = TrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=args.per_device_eval_batch_size,
+        per_device_eval_batch_size=16,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         optim=args.optim,
         learning_rate=args.learning_rate,
@@ -222,42 +206,80 @@ def main(args):
     
     
     # tokenizer
-    hf_auth = env_config["hf_auth"]
-    model_name = args.model_name
-    tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_auth, trust_remote_code=True)
-    tokenizer.pad_token = tokenizer.eos_token
+    hf_auth = "YOUR_TOKEN"
+    # model_path = '/data1/model/llama2/meta-llama/Llama2-13b'
+    model_path = '/data1/model/llama3/unsloth/Llama3-8b'
+
+    # tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_auth, trust_remote_code=True)
+    # tokenizer.pad_token = tokenizer.eos_token
+    
     # datasets
-    tasks_datasets_prefix = args.tasks_datasets_prefix
-    lora_path_prefix = args.lora_path_prefix
-    tasks = get_dataset_name_from_tasks_path(tasks_datasets_prefix)
-    print(tasks)
-    default_task = args.default_task
-    tasks.append(default_task)
+    tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_translation_balance_no_sys"
+    # tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_llama3_tmp/"
+    
+    # lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b_fuze21_no_sys/"
+    # lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama3_8b_tmp/"
+    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama3_8b_fuze27_no_sys/"
+    default_task = "alpaca"
+    # model, tokenizer = load_model_and_tokenizer(model_path, tasks_datasets_prefix, lora_path_prefix)
+    # weight_path = "/data2/xjw/llama-meteor-data/28tasks-balance-1k-top2-coef50-dropout01-layerMSE-withTranslationTasks/checkpoint-5000/pytorch_model_fsdp_0"
+    # model, tokenizer, tasks = load_moe_model_and_tokenizer(weight_path, model_path, tasks_datasets_prefix, lora_path_prefix)
+    model, tokenizer, tasks = load_model_and_tokenizer(model_path, tasks_datasets_prefix, lora_path_prefix, default_task = default_task)
+    tokenizer.pad_token = tokenizer.eos_token
+    model.to('cuda')
+    # tasks = get_dataset_name_from_tasks_path(tasks_datasets_prefix)
+    
+    # tasks.append(default_task)
     tasks_datasets = [tasks_datasets_prefix + task for task in tasks]
+    print("load datasets from", tasks_datasets)
+    # train_dataset, test_dataset = create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, args.max_seq_length)
+    train_dataset, test_dataset = create_bbl_united_dataset(tasks_datasets, tokenizer, args.max_seq_length, tasks_datasets_prefix + default_task)
 
     # load model
-    llama_meteor = LlamaMeteorForCausalLM.from_pretrained(model_name, token=hf_auth, device_map=None, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
-    llama_meteor.to("cuda")
 
-    print("model loaded", llama_meteor)    
-    ADAPTERS = { "lora"+str(index+1):lora_path_prefix + task + "_no_sys"  for index, task in enumerate(tasks)}
-    print("load adapters from", ADAPTERS)
+    # llama_meteor = LlamaMeteorForCausalLM.from_pretrained(model_name, token=hf_auth, device_map=None, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+    # llama_meteor.to("cuda")
 
-    model = PeftModel.from_pretrained_multi(
-    llama_meteor, ADAPTERS, load_adapter_weights=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", is_trainable=False)
-    model.to('cuda')
+    # print("model loaded", llama_meteor)
+
+    
+    
+    # ADAPTERS = { "lora"+str(index+1):lora_path_prefix + task + "_no_sys"  for index, task in enumerate(tasks)}
+    # print("load adapters from", ADAPTERS)
+
+    # lora1 = lora_path_prefix + "bbq_lite_json"
+    # lora2 = lora_path_prefix + "linguistics_puzzles"
+    # lora3 = lora_path_prefix + "strategyqa"
+    # lora4 = lora_path_prefix + "formal_fallacies_syllogisms_negation"
+    # lora5 = lora_path_prefix + "logical_deduction"
+    # lora6 = lora_path_prefix + "vitaminc_fact_verification"
+    # lora7 = lora_path_prefix + "language_identification"
+    # ADAPTERS["lora1"] = lora1
+    # ADAPTERS["lora2"] = lora2
+    # ADAPTERS["lora3"] = lora3
+    # ADAPTERS["lora4"] = lora4
+    # ADAPTERS["lora5"] = lora5
+    # ADAPTERS["lora6"] = lora6
+    # ADAPTERS["lora7"] = lora7
+    # ADAPTERS["lora8"] = lora8
+    # ADAPTERS["lora9"] = lora9
+    
+
+    # model = PeftModel.from_pretrained_multi(
+    # llama_meteor, ADAPTERS, load_adapter_weights=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", is_trainable=False)
+    # model.to('cuda')
     print("adapter model loaded", model)
-    model.config.use_cache = False
 
-    print("load datasets from", tasks_datasets)
-    train_dataset, test_dataset = create_bbl_united_dataset(tasks_datasets, tokenizer, args.max_seq_length, tasks_datasets_prefix + default_task)
+
+    # model, peft_config = create_and_prepare_model(args)
+    model.config.use_cache = False
 
 
     train_parameters = 0
     total_parameters = sum([p.numel() for p in model.parameters()])
     for module, weight in model.named_parameters():
-        if "moe_gate" in module or "lora_" in module:
-        # if "moe_gate" in module:
+        # if "moe_gate" in module or "lora_" in module:
+        if "moe_gate" in module:
             train_parameters += weight.numel()
             weight.requires_grad = True
         else:

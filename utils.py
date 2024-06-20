@@ -242,6 +242,7 @@ def tokenize_datasets(dataset, tokenizer, max_length, dataset_type, data_index):
 
 
 def get_dataset_name_from_tasks_path(path):
+    print(path)
     dataset_names = [name for name in os.listdir(path) if name != "alpaca"]
     return dataset_names
 

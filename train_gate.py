@@ -14,10 +14,6 @@
 # limitations under the License.
 from dataclasses import dataclass, field
 import os
-from dotenv import dotenv_values
-
-from traitlets import default
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
 import subprocess
 from typing import Optional
 
@@ -29,23 +25,7 @@ import torch
 from MoELoRA.peft_model import PeftModel
 
 from transformers import HfArgumentParser, TrainingArguments, Trainer
-# from trl import SFTTrainer
 from utils import *
-
-
-env_config = dotenv_values(".env")
-print(env_config)
-
-
-########################################################################
-# This is a fully working simple example to use trl's RewardTrainer.
-#
-# This example fine-tunes any causal language model (GPT-2, GPT-Neo, etc.)
-# by using the RewardTrainer from trl, we will leverage PEFT library to finetune
-# adapters on the model.
-#
-########################################################################
-
 
 # Define and parse arguments.
 @dataclass
@@ -80,7 +60,11 @@ class ScriptArguments:
             "help": "The model that you want to train from the Hugging Face hub. E.g. gpt2, gpt2-xl, bert, etc."
         },
     )
-    datasets_names: Optional[str] = field(
+    tasks_datasets_prefix: Optional[str] = field(
+        default="timdettmers/openassistant-guanaco",
+        metadata={"help": "The preference dataset to use."},
+    )
+    lora_path_prefix: Optional[str] = field(
         default="timdettmers/openassistant-guanaco",
         metadata={"help": "The preference dataset to use."},
     )
@@ -139,15 +123,6 @@ class ScriptArguments:
     logging_steps: int = field(
         default=10, metadata={"help": "Log every X updates steps."}
     )
-    tasks_datasets_prefix: str = field(
-        default="", metadata={"help": "Prefix path for tasks datasets."}
-    )
-    lora_path_prefix: str = field(
-        default="", metadata={"help": "Prefix path for LoRA models."}
-    )
-    default_task: str = field(
-        default="", metadata={"help": "Default task."}
-    )
     output_dir: str = field(
         default="results", metadata={"help": "Where to store the final model."}
     )
@@ -199,7 +174,7 @@ def main(args):
     training_arguments = TrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=args.per_device_eval_batch_size,
+        per_device_eval_batch_size=8,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         optim=args.optim,
         learning_rate=args.learning_rate,
@@ -222,24 +197,36 @@ def main(args):
     
     
     # tokenizer
-    hf_auth = env_config["hf_auth"]
-    model_name = args.model_name
+    hf_auth = "YOUR_TOKEN"
+    model_name = "/data1/model/llama2/meta-llama/Llama2-13b"
     tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_auth, trust_remote_code=True)
+    # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token = tokenizer.eos_token
     # datasets
-    tasks_datasets_prefix = args.tasks_datasets_prefix
-    lora_path_prefix = args.lora_path_prefix
+    # tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_translation_balance_no_sys/"
+    # tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_28_balance_no_sys/"
+    tasks_datasets_prefix = "/data0/ljy/workspace/BIG-bench/fuze_28_balance_no_sys/"
+    # lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b_fuze27_no_sys/"
+    # lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama3_8b_fuze27_no_sys/"
+    lora_path_prefix = "/data0/ljy/workspace/LLaMA-Factory/ckpt/llama2_13b_fuze27_no_sys/"
     tasks = get_dataset_name_from_tasks_path(tasks_datasets_prefix)
-    print(tasks)
-    default_task = args.default_task
+    default_task = "alpaca"
+    # default_task = "object_counting"
     tasks.append(default_task)
     tasks_datasets = [tasks_datasets_prefix + task for task in tasks]
+    print("load datasets from", tasks_datasets)
+    # train_dataset, test_dataset = create_gsm8k_vggio_sqlctx(data_path_prefix, tokenizer, args.max_seq_length)
+    train_dataset, test_dataset = create_bbl_united_dataset(tasks_datasets, tokenizer, args.max_seq_length, tasks_datasets_prefix + default_task)
 
     # load model
+
     llama_meteor = LlamaMeteorForCausalLM.from_pretrained(model_name, token=hf_auth, device_map=None, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
     llama_meteor.to("cuda")
 
-    print("model loaded", llama_meteor)    
+    print("model loaded", llama_meteor)
+
+    
+    
     ADAPTERS = { "lora"+str(index+1):lora_path_prefix + task + "_no_sys"  for index, task in enumerate(tasks)}
     print("load adapters from", ADAPTERS)
 
@@ -249,15 +236,12 @@ def main(args):
     print("adapter model loaded", model)
     model.config.use_cache = False
 
-    print("load datasets from", tasks_datasets)
-    train_dataset, test_dataset = create_bbl_united_dataset(tasks_datasets, tokenizer, args.max_seq_length, tasks_datasets_prefix + default_task)
-
 
     train_parameters = 0
     total_parameters = sum([p.numel() for p in model.parameters()])
     for module, weight in model.named_parameters():
-        if "moe_gate" in module or "lora_" in module:
-        # if "moe_gate" in module:
+        # if "moe_gate" in module or "lora_" in module:
+        if "moe_gate" in module:
             train_parameters += weight.numel()
             weight.requires_grad = True
         else:

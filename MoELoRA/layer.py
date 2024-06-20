@@ -59,16 +59,16 @@ class MoELoraLayer(BaseTunerLayer):
         self.lora_alpha = {}
         self.scaling = {}
         self.lora_index = {}
-        self.rmoe = 512
+        self.rmoe = 224
         # for key in self.r.keys:
         #     self.rmoe += self.r[key]
         in_features = self.get_base_layer().in_features
         out_features = self.get_base_layer().out_features
 
         self.loras = 0
-        self.top_k = 1
+        self.top_k = 2
         # gating
-        self.moe_gate = nn.Linear(in_features, 1, bias=False)
+        self.moe_gate = nn.Linear(in_features, 28, bias=False)
 
         self.lora_dropout = nn.ModuleDict({}) # todo: dict to list?
         self.lora_A = nn.Linear(in_features, self.rmoe, bias=False)
