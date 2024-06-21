@@ -67,6 +67,7 @@ class MoELoraLayer(BaseTunerLayer):
 
         self.loras = 0
         self.top_k = 2
+        self.T = 1
         # gating
         self.moe_gate = nn.Linear(in_features, 28, bias=False)
 
@@ -571,7 +572,8 @@ class MoELinear(nn.Module, MoELoraLayer):
             else: moe_weights, selected_loras = torch.topk(self.moe_gate(x), self.top_k, dim=-1)
 
             if self.top_k == 1: moe_weights[:] = 1. # when k=1, then weights must be 1.
-            else: moe_weights = F.softmax(moe_weights, dim=1, dtype=torch.float).to(x.dtype)
+            # else: moe_weights = F.softmax(moe_weights, dim=1, dtype=torch.float).to(x.dtype)
+            else: moe_weights = F.softmax(moe_weights/self.T, dim=1, dtype=torch.float).to(x.dtype)
 
             x = x.to(self.lora_A.weight.dtype)
             result = result.view(-1, out_features)

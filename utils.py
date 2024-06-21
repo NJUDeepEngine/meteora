@@ -28,6 +28,7 @@ from transformers import (
     LlamaForCausalLM,
 )
 from peft import PeftModel as HF_PeftModel
+from safetensors.torch import load_file
 
 from base_model.llama.modeling_llama_meteor import LlamaMeteorForCausalLM, LlamaMeteorModel
 import torch
@@ -527,15 +528,8 @@ def load_meteora_model(base_model_path, adapter_dir, meteora_ckpt_path):
     )
 
     # load ckpt
-    state_dict = {
-        "model": meteora_model.state_dict()
-    }
-    dist_cp.load_state_dict(
-        state_dict=state_dict,
-        storage_reader=dist_cp.FileSystemReader(meteora_ckpt_path),
-        no_dist=True
-    )
-    meteora_model.load_state_dict(state_dict['model'])
+    state_dict = load_file(meteora_ckpt_path, device='cuda')
+    meteora_model.load_state_dict(state_dict)
 
     return meteora_model, tokenizer
 

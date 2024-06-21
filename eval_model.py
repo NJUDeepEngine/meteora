@@ -237,7 +237,7 @@ if __name__ == '__main__':
     # MeteoRA model
     if args.model == DEFAULT_MODEL:
         # TODO: remove this
-        meteora_ckpt_path += '/checkpoint-5000/pytorch_model_fsdp_0'
+        meteora_ckpt_path += '/model.safetensors'
         result['meteora_ckpt_path'] = meteora_ckpt_path
         model, tokenizer = utils.load_meteora_model(base_model_path, adapter_dir, meteora_ckpt_path)
     # PEFT
