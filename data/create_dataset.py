@@ -4,13 +4,19 @@ import json
 import datasets
 import random
 from tqdm import tqdm
+import yaml
 
 from dataset_presets import get_presets
 from dataset_utils import process_sample, get_prompt_and_response_hf
 
 ### file path
-bigbench_dataset_dir = ""
-target_dir = "datasets"
+with open(os.path.join('..','configs', 'config.yaml')) as f:
+    try:
+        config = yaml.safe_load(f)
+    except:
+        print("Error loading config file")
+bigbench_dataset_dir = config['bigbench_dataset_dir']
+target_dir = config['target_dir']
 ###
 
 random.seed(42)

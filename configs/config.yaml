@@ -1,0 +1,11 @@
+# model
+base_model_path: ''
+meteora_ckpt_path: ''
+adapter_dir: ''
+
+# dataset
+bigbench_dataset_dir: ''
+target_dir: "datasets"
+
+# evaluation
+eval_result_save_dir: 'eval/results'

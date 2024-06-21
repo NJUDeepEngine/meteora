@@ -12,10 +12,11 @@ from eval.check import check_benchmark
 from constant import MAX_SAMPLE
 
 ### file path
-base_model_path = ''
-adapter_dir = 'ckpt/adapters'
-meteora_ckpt_path = ''
-eval_result_save_dir = 'eval/results'
+config = utils.load_config()
+base_model_path = config['base_model_path']
+adapter_dir = config['adapter_dir']
+meteora_ckpt_path = config['meteora_ckpt_path']
+eval_result_save_dir = config['eval_result_save_dir']
 ###
 
 task_set = {

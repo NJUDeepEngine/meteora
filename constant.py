@@ -29,9 +29,9 @@ MAX_SAMPLE = {
     "epistemic_reasoning": MAX_SAMPLE_THRESHOLD,
     "play_dialog_same_or_different": MAX_SAMPLE_THRESHOLD,
     "winowhy": MAX_SAMPLE_THRESHOLD,
-    "serial_3": MAX_SAMPLE_THRESHOLD,
-    "serial_5": MAX_SAMPLE_THRESHOLD,
-    "serial_10": MAX_SAMPLE_THRESHOLD,
+    "composite_3": MAX_SAMPLE_THRESHOLD,
+    "composite_5": MAX_SAMPLE_THRESHOLD,
+    "composite_10": MAX_SAMPLE_THRESHOLD,
 }
 
 # WARNING: The tasks order in the list will influence MeteoRA model, DO NOT change the order.
