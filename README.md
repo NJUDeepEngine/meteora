@@ -2,6 +2,30 @@
 
 This repository contains the implementation of the paper "MeteoRA: Multiple-tasks Embedded LoRA for Large Language Models".
 
+
+![Evaluation Results](images/framework.png)
+
+## Overal performance
+
+We successfully apply MeteoRA to both LlaMA2-13B and LlaMA3-8B. Each model equips 28 tasks embedded in 28 LoRA adapters, respectively. 
+The performance of MeteoRA is comparable to the state-of-the-art. Refer to our paper for the detailed information of evaluation settings.
+
+<!-- Evaluation results of models based on LlaMA2-13B:
+![Evaluation Results](images/llama2_13b_radar_graph_v3.png)
+
+Evaluation results of models based on LlaMA3-8B:
+![Evaluation Results](images/llama3_8b_radar_graph_v3.png) -->
+
+<table>
+  <tr>
+    <td><img src="images/llama2_13b_radar_graph_v3.png" alt="LlaMA2-13B" width="300"/></td>
+    <td><img src="images/llama3_8b_radar_graph_v3.png" alt="LlaMA3-8B" width="300"/></td>
+  </tr>
+</table>
+
+
+
+
 ## Directory structure
 
 - `base_model`: Contains the MeteoRA model.
@@ -34,7 +58,7 @@ This repository contains the implementation of the paper "MeteoRA: Multiple-task
       ```shell
       python create_composite.py --n <n>
       ```
-We prepared `n=3`, `n=5` and `n=10` few-shot dataset generating code. Before generation, please ensure that the sub-tasks to composite *composite-n* task have been included in `data/datasets`.
+      We prepared `n=3`, `n=5` and `n=10` few-shot dataset generating code. Before generation, please ensure that the sub-tasks to composite *composite-n* task have been included in `data/datasets`.
 
 4. Prepare LoRA adapters and MeteoRA model checkpoints. You can train them yourself or download ours pre-trained models ([LlaMA2](https://huggingface.co/hDPQ4gi9BG/MeteoRA_llama2_13b) and [LlaMA3](https://huggingface.co/hDPQ4gi9BG/MeteoRA_llama3_8b) as base model):
       ```shell
@@ -108,6 +132,31 @@ export MOELINEAR_FWD_INNER_LOOP_MODE='batch'
 export MOELINEAR_ACCELERATE_FWD_BACKEND='torch'
 export MOELINEAR_ACCELERATE_FWD_BACKEND_TORCH_VERSION='v1'
 ```
+
+
+### Evaluation Results
+
+#### 1. 
+
+
+#### 2. *composite-n* results
+
+The *composite-10* evaluation results are presented in details with MeteoRA results on the left side and LoRA-B results on the right side of each metric column. A dash ('-') indicates that the corresponding metric was not applicable or included in the evaluation. Note that the `0.00` BLEU scores are caused by mismatch and too insufficient answers.
+
+| Sub-task Name                  | Accuracy↑ (MeteoRA) | Accuracy↑ (LoRA-B) | BLEU↑ (MeteoRA) | BLEU↑ (LoRA-B) | ROUGE-1↑ (MeteoRA) | ROUGE-1↑ (LoRA-B) | ROUGE-2↑ (MeteoRA) | ROUGE-2↑ (LoRA-B) | ROUGE-L↑ (MeteoRA) | ROUGE-L↑ (LoRA-B) |
+|--------------------------------|---------------------|--------------------|-----------------|----------------|---------------------|--------------------|---------------------|--------------------|---------------------|--------------------|
+| logical_deduction              | 0.500↑             | 0.453              | -               | -              | -                   | -                  | -                   | -                  | -                   | -                  |
+| question_selection             | 0.703↑             | 0.688              | -               | -              | -                   | -                  | -                   | -                  | -                   | -                  |
+| abstract_narrative_understanding| 0.625↓             | 0.672              | -               | -              | -                   | -                  | -                   | -                  | -                   | -                  |
+| goal_step_wikihow              | 0.773↑             | 0.727              | -               | -              | -                   | -                  | -                   | -                  | -                   | -                  |
+| winowhy                        | 0.422↑             | 0.078              | -               | -              | -                   | -                  | -                   | -                  | -                   | -                  |
+| strategyqa                     | 0.461↑             | 0.211              | 3.23↑           | 0.00           | 0.225↑             | 0.106              | 0.051↑             | 0.025              | 0.210↑             | 0.099              |
+| disfl_qa                       | 0.266↑             | 0.117              | -               | -              | -                   | -                  | -                   | -                  | -                   | -                  |
+| news_commentary_de             | -                   | -                  | 14.78↑         | 14.54          | -                   | -                  | -                   | -                  | -                   | -                  |
+| alpaca                         | -                   | -                  | 0.00↓          | 8.17           | 0.257↑             | 0.187              | 0.075               | 0.075              | 0.241↑             | 0.167              |
+| linguistics_puzzles            | -                   | -                  | 17.37↑         | 12.14          | 0.233↑             | 0.189              | 0.052↑             | 0.030              | 0.176↑             | 0.103              |
+
+
 
 ## Citation
 
