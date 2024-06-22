@@ -1,11 +1,13 @@
 # MeteoRA: Multiple-tasks Embedded LoRA for Large Language Models
 
-This repository contains the implementation of the paper "MeteoRA: Multiple-tasks Embedded LoRA for Large Language Models".
+This repository contains the implementation of the [paper](https://arxiv.org/abs/2405.13053) "MeteoRA: Multiple-tasks Embedded LoRA for Large Language Models".
 
 
 ![Evaluation Results](images/framework.png)
 
 ## Overal performance
+
+### General performance of MeteoRA embeded LLMs with 28 LoRA adapters
 
 We successfully apply MeteoRA to both LlaMA2-13B and LlaMA3-8B. Each model equips 28 tasks embedded in 28 LoRA adapters, respectively. 
 The performance of MeteoRA is comparable to the state-of-the-art. Refer to our paper for the detailed information of evaluation settings.
@@ -25,7 +27,10 @@ Evaluation results of models based on LlaMA3-8B:
 &nbsp;&nbsp;&nbsp;&nbsp;MeteoRA with LlaMA2-13B    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  MeteoRA with LlaMA3-8B
 
 
+### Example of *composite-3* tasks
+We highlight the statistically dominant LoRA selected by MeteoRA in token level (decoded to words). The result shows that LLM with MeteoRA could achieve timely LoRA switching on both phases of input understanding and output generation. The background color gets darker when Gating network assigns a higher weight value.
 
+![Evaluation Results](images/serial_3_short.png)
 ## Directory structure
 
 - `base_model`: Contains the MeteoRA model.
