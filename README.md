@@ -65,7 +65,7 @@ We highlight the statistically dominant LoRA selected by MeteoRA in token level 
       ```
       We prepared `n=3`, `n=5` and `n=10` few-shot dataset generating code. Before generation, please ensure that the sub-tasks to composite *composite-n* task have been included in `data/datasets`.
 
-4. Prepare LoRA adapters and MeteoRA model checkpoints. You can train them yourself or download ours pre-trained models ([LlaMA2](https://huggingface.co/hDPQ4gi9BG/MeteoRA_llama2_13b) and [LlaMA3](https://huggingface.co/hDPQ4gi9BG/MeteoRA_llama3_8b) as base model):
+4. Prepare LoRA adapters and MeteoRA model checkpoints. You can train them yourself or download ours pre-trained models ([LlaMA2](https://huggingface.co/ParagonLight/MeteoRA-llama2-13b) and [LlaMA3](https://huggingface.co/ParagonLight/MeteoRA-llama3-8b) as base model):
       ```shell
       python download_ckpt.py
       ```
