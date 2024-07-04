@@ -3,7 +3,7 @@
 This repository contains the implementation of the [paper](https://arxiv.org/abs/2405.13053) "MeteoRA: Multiple-tasks Embedded LoRA for Large Language Models".
 
 
-![Evaluation Results](images/framework.png)
+![Evaluation results](images/framework.png)
 
 ## Overal performance
 
@@ -30,7 +30,7 @@ Evaluation results of models based on LlaMA3-8B:
 ### Example of *composite-3* tasks
 We highlight the statistically dominant LoRA selected by MeteoRA in token level (decoded to words). The result shows that LLM with MeteoRA could achieve timely LoRA switching on both phases of input understanding and output generation. The background color gets darker when Gating network assigns a higher weight value.
 
-![Evaluation Results](images/serial_3_short.png)
+![Evaluation results](images/serial_3_short.png)
 ## Directory structure
 
 - `base_model`: Contains the MeteoRA model.
@@ -139,7 +139,7 @@ export MOELINEAR_ACCELERATE_FWD_BACKEND_TORCH_VERSION='v1'
 ```
 
 
-### Evaluation Results
+### Evaluation results
 
 #### *composite-n* results
 
