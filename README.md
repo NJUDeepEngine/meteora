@@ -141,10 +141,7 @@ export MOELINEAR_ACCELERATE_FWD_BACKEND_TORCH_VERSION='v1'
 
 ### Evaluation Results
 
-#### 1. 
-
-
-#### 2. *composite-n* results
+#### *composite-n* results
 
 The *composite-10* evaluation results are presented in details with MeteoRA results on the left side and LoRA-B results on the right side of each metric column. A dash ('-') indicates that the corresponding metric was not applicable or included in the evaluation. Note that the `0.00` BLEU scores are caused by mismatch and too insufficient answers.
 
