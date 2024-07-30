@@ -12,7 +12,7 @@ safetensors==0.4.3
 sentencepiece==0.2.0
 tokenizers==0.19.1
 torch==2.2.1
-tqdm==4.66.2
+tqdm==4.66.3
 transformers==4.40.0
 triton==2.2.0
 triton_nightly==2.1.0.dev20230728172942
