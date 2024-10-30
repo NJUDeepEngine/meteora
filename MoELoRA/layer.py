@@ -463,18 +463,30 @@ class MoELinear(nn.Module, MoELoraLayer):
                 self.lora_A_weights = self.lora_A.weight.view(self.loras, self.unique_rank, -1).transpose(1,2) # (l, h, r)
                 if self.accelerate_fwd_backend == "triton":
                     h, m, r = self.lora_A_weights.shape[1], self.accelerate_fwd_backend_triton_group_size, self.unique_rank
-                    self.lora_A_weights = torch.cat(self.lora_A_weights.split(h//m, dim=1), dim=2).contiguous() # shape from (l, h, r) to (l, h//m, r*m)
+                    self.lora_A_weights_split = torch.cat(self.lora_A_weights.split(h//m, dim=1), dim=2).contiguous() # shape from (l, h, r) to (l, h//m, r*m)
                     if self.accelerate_fwd_backend_triton_version == "v3":
                         self.lora_A_mask = torch.zeros(m, r*m, dtype=torch.bool, device=self.lora_A_weights.device) # shape: (m, r*m)
                         for i in range(m): self.lora_A_mask[i, i*r:(i+1)*r] = True
                     elif self.accelerate_fwd_backend_triton_version == "v4":
-                        self.lora_A_weights *= self.scalings[: , None, None] # prescaling on lora_A
+                        self.lora_A_weights_split *= self.scalings[: , None, None] # prescaling on lora_A
                         lora_A_mask1 = torch.zeros(m, r*m, dtype=self.lora_A_weights.dtype, device=self.lora_A_weights.device) # shape: (m, r*m)
                         for i in range(m): lora_A_mask1[i, i*r:(i+1)*r] = 1.
                         lora_A_mask2 = torch.cat([torch.eye(r, dtype=self.lora_A_weights.dtype, device=self.lora_A_weights.device) for _ in range(m)], dim=0).contiguous() # shape: (r*m, r)
                         self.lora_A_mask = (lora_A_mask1, lora_A_mask2) # mask olA by `olA * lA_mask1 @ lA_mask2` (shape: (m, r*m) => (m, r)) to be used in `olA @ lB`
             if self.lora_B_weights is None:
                 self.lora_B_weights = self.lora_B.weight.view(-1, self.loras, self.unique_rank).permute(1,2,0).contiguous() # (l, r, hout)
+                if self.accelerate_fwd_backend == "triton":
+                    hout, n, r = self.lora_B_weights.shape[-1], self.accelerate_fwd_backend_triton_group_size, self.unique_rank
+                    self.lora_B_weights_split = torch.cat(self.lora_B_weights.split(hout//n, dim=2), dim=1).contiguous()
+                    if self.accelerate_fwd_backend_triton_version == "v3":
+                        self.lora_B_mask = torch.zeros(n, r*n, dtype=self.lora_B_weights.dtype, device=self.lora_B_weights.device)
+                        for i in range(n): self.lora_B_mask[i, i*r:(i+1)*r] = True
+                    elif self.accelerate_fwd_backend_triton_version == "v4":
+                        self.lora_B_weights_split *= self.scalings[:, None, None] # prescaling on lora_B
+                        lora_B_mask1 = torch.zeros(r*n, n, dtype=self.lora_B_weights.dtype, device=self.lora_B_weights.device) # shape: (r*n, n)
+                        for i in range(n): lora_B_mask1[i*r:(i+1)*r, i] = 1.
+                        lora_B_mask2 = torch.cat([torch.eye(r, dtype=self.lora_B_weights.dtype, device=self.lora_B_weights.device) for _ in range(n)], dim=1).contiguous() # shape: (r, r*n)
+                        self.lora_B_mask = (lora_B_mask1, lora_B_mask2) # mask olB 
             
         self.parallel_fwd_inner_loop = self.use_accelerated_fwd and self.fwd_inner_loop_mode == 'parallel' and (self.fwd_inner_loop_pmode4train or not self.training)
         if self.parallel_fwd_inner_loop:
@@ -600,10 +612,11 @@ class MoELinear(nn.Module, MoELoraLayer):
         if self.accelerate_fwd_backend == "triton" and self.accelerate_fwd_backend_triton_version in ["v3", "v4"]:
             self.accelerate_fwd_inner_func(
                 x=x, result=result, 
-                lora_A_weights=self.lora_A_weights, lora_B_weights=self.lora_B_weights,
+                lora_A_weights=self.lora_A_weights, lora_A_weights_split=self.lora_A_weights_split,
+                lora_B_weights=self.lora_B_weights, lora_B_weights_split=self.lora_A_weights_split,
                 scalings=self.scalings, lora_dropout=self.unique_lora_dropout,
                 moe_weights=moe_weights, selected_loras=selected_loras,
-                lora_A_mask=self.lora_A_mask,
+                lora_A_mask=self.lora_A_mask, lora_B_mask=self.lora_B_mask,
             )
         else:
             self.accelerate_fwd_inner_func(

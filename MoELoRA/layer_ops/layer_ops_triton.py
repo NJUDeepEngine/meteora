@@ -65,7 +65,7 @@ def _moelinear_fwd_inner_bmm_triton_v4(
     
     ## prepare inputs
     x = x[:, None, :] # shape from (bs, h) to (bs, 1, h)
-    x = lora_dropout(x).view(bs, m, hm) # shape from (bs, 1, h) => (bs, m, h//m)
+    x = x.view(bs, m, hm) # shape from (bs, 1, h) => (bs, m, h//m)
     if k > 1: 
         moe_weights = moe_weights.view(-1)[:, None] # shape from (bs, k) => (bs*k, 1)
         selected_loras = selected_loras.view(-1) # shape from (bs, k) => (bs*k,)
@@ -103,6 +103,9 @@ def _moelinear_fwd_inner_bmm_triton_v4(
     )
     
     ##############################      postprocess output     ##############################
+    # save and return blora_results for backward
+    result_moe = blora_results # shape = (bs*k, hout)
+    
     ## pass scaling since the result is already pre-scaled on lora_A ! 
     ## apply moe weighted sum for topk loras
     if k > 1: 
@@ -112,7 +115,7 @@ def _moelinear_fwd_inner_bmm_triton_v4(
     ## add the blora result to the base result
     result.add_(blora_results)
     
-    return result
+    return result, result_moe
 
 
 ###########################        version 3        ###########################
@@ -166,6 +169,9 @@ def _moelinear_fwd_inner_bmm_triton_v3(
         blora_B
     ).squeeze(1) * bscalings
     
+    # save and return blora_results for backward
+    result_moe = blora_results # shape = (bs*k, hout)
+    
     ## apply moe weighted sum for topk loras
     if k > 1:
         blora_results *= moe_weights
@@ -174,7 +180,7 @@ def _moelinear_fwd_inner_bmm_triton_v3(
     ## add the blora result to the base result
     result.add_(blora_results.to(x.dtype))
     
-    return result
+    return result, result_moe
 
 
 ###########################        version 2        ###########################
@@ -232,7 +238,7 @@ def _moelinear_fwd_inner_bmm_triton_v2(
         block_size_h=128,
         block_size_hout=128,
         block_size_m=16, # NOTE: to avoid tl.dot error for all dimensions should be >= 16, we use the minimum size 16 here (actucally it is always 1)
-        block_size_r=16,
+        block_size_r=max(16, r),
         num_warps=4,
         num_stages=2,
     )
@@ -254,6 +260,8 @@ def _moelinear_fwd_inner_bmm_triton_v2(
     ##############################      postprocess output     ##############################
     ## scaling
     blora_results = blora_results.squeeze(1) * bscalings  # shape from (bs*k, 1, hout) to (bs*k, hout)
+    # save and return blora_results for backward
+    result_moe = blora_results # shape = (bs*k, hout)
     ## apply moe weighted sum for topk loras
     if k > 1: 
         blora_results *= moe_weights # shape = (bs*k, hout)
@@ -262,7 +270,7 @@ def _moelinear_fwd_inner_bmm_triton_v2(
     ## add the blora result to the base result
     result.add_(blora_results.to(x.dtype))
     
-    return result
+    return result, result_moe
 
 
 ###########################        version 1        ###########################
@@ -308,6 +316,8 @@ def _moelinear_fwd_inner_bmm_triton_v1(
         blora_B # shape: (bs*k, 1, r) =>(bs*k, 1, hout)
     ).squeeze(1) * bscalings # shape: (bs*k, 1, hout) => (bs*k, hout)
     
+    # save and return blora_results for backward
+    result_moe = blora_results # shape = (bs*k, hout)
     ## apply moe weighted sum for topk loras
     if k > 1:
         blora_results *= moe_weights
@@ -316,7 +326,7 @@ def _moelinear_fwd_inner_bmm_triton_v1(
     ## add the blora result to the base result
     result.add_(blora_results.to(x.dtype))
     
-    return result
+    return result, result_moe
 
 
 ###########################        version 0        ###########################
