@@ -103,6 +103,8 @@ def moelinear_fwd_inner_bmm_triton(
         kwargs['lora_B_mask'] = lora_B_mask
         kwargs['lora_A_weights_split'] = lora_A_weights_split
         kwargs['lora_B_weights_split'] = lora_B_weights_split
+    elif version in ['v0']:
+        kwargs['x'] = x
     
     if version == 'v0': return _moelinear_fwd_inner_bmm_triton_v0(**kwargs)
     elif version == 'v1': return MoeLinear_Inner_Bmm_Triton_v1.apply(**kwargs)

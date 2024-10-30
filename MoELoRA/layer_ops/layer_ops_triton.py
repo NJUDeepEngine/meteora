@@ -165,7 +165,7 @@ def _moelinear_fwd_inner_bmm_triton_v3(
 
     ## apply bmm for each (token_idx, top_idx) to its selected (loraA, loraB, scalings)
     blora_results = triton_bmm(
-        triton_bmm(lora_dropout(x), blora_A)[lora_A_mask[None, :].expand(bsk, -1, -1)].view(bsk, m, -1).sum(dim=1, keepdim=True), # shape: (bs*k, m, h//m) => (bs*k, r*m) => (bs*k, m, r) => (bs*k, 1, r)
+        triton_bmm(x, blora_A)[lora_A_mask[None, :].expand(bsk, -1, -1)].view(bsk, m, -1).sum(dim=1, keepdim=True), # shape: (bs*k, m, h//m) => (bs*k, r*m) => (bs*k, m, r) => (bs*k, 1, r)
         blora_B
     ).squeeze(1) * bscalings
     
@@ -220,7 +220,7 @@ def _moelinear_fwd_inner_bmm_triton_v2(
     if k > 1:
         x = x.expand(bs, k, -1).reshape(bsk, 1, -1)  # shape from (bs, 1, h) to (bs*k, 1, h)
         moe_weights = moe_weights.view(-1)[:, None] # shape from (bs, k) to (bs*k, 1)
-    x = lora_dropout(x) # shape: (bs*k, 1, h)
+    # x = lora_dropout(x) # shape: (bs*k, 1, h)
     
     ## prepare batched selected (loraA, loraB, scalings)
     selected_loras = selected_loras.view(-1) # shape from (bs, k) to (bs*k,)
@@ -312,7 +312,7 @@ def _moelinear_fwd_inner_bmm_triton_v1(
 
     ## apply bmm for each (token_idx, top_idx) to its selected (loraA, loraB, scalings)
     blora_results = triton_bmm(
-        triton_bmm(lora_dropout(x), blora_A), # shape: (bs*k, 1, h) => (bs*k, 1, r)
+        triton_bmm(x, blora_A), # shape: (bs*k, 1, h) => (bs*k, 1, r)
         blora_B # shape: (bs*k, 1, r) =>(bs*k, 1, hout)
     ).squeeze(1) * bscalings # shape: (bs*k, 1, hout) => (bs*k, hout)
     
