@@ -16,6 +16,13 @@ from .layer_ops_triton import (
     _moelinear_fwd_inner_bmm_triton_v4,
 )
 
+from .layer_ops_triton_function import (
+    MoeLinear_Inner_Bmm_Triton_v1,
+    MoeLinear_Inner_Bmm_Triton_v2,
+    MoeLinear_Inner_Bmm_Triton_v3,
+    MoeLinear_Inner_Bmm_Triton_v4,
+)
+
 
 def moelinear_fwd_inner_bmm_torch(
         x: torch.Tensor, result: torch.Tensor, 
@@ -53,10 +60,14 @@ def moelinear_fwd_inner_bmm_torch(
     
 def moelinear_fwd_inner_bmm_triton(
         x: torch.Tensor, result: torch.Tensor, 
-        lora_A_weights: torch.Tensor, lora_B_weights: torch.Tensor, 
+        lora_A_weights: torch.Tensor,
+        lora_B_weights: torch.Tensor,
         scalings: torch.Tensor, lora_dropout: torch.nn.Module,
         moe_weights: torch.Tensor, selected_loras: torch.Tensor, 
+        lora_A_weights_split: torch.Tensor = None,
+        lora_B_weights_split: torch.Tensor = None,
         lora_A_mask: Union[torch.Tensor, List[torch.Tensor]] = None,
+        lora_B_mask: Union[torch.Tensor, List[torch.Tensor]] = None,
         version='v4',
     ) -> torch.Tensor:
     """the inner bmm process in MoELinear.forward implemented by triton
@@ -78,18 +89,26 @@ def moelinear_fwd_inner_bmm_triton(
     assert version in ['v1', 'v2', 'v3', 'v4']
     
     kwargs = dict(
-        x=x, result=result,
+        x=lora_dropout(x), result=result,
         lora_A_weights=lora_A_weights, lora_B_weights=lora_B_weights,
         scalings=scalings, lora_dropout=lora_dropout,
         moe_weights=moe_weights, selected_loras=selected_loras
     )
     if version in ['v3', 'v4']: 
         assert lora_A_mask is not None
+        assert lora_B_mask is not None
+        assert lora_A_weights_split is not None
+        assert lora_B_weights_split is not None
         kwargs['lora_A_mask'] = lora_A_mask
+        kwargs['lora_B_mask'] = lora_B_mask
+        kwargs['lora_A_weights_split'] = lora_A_weights_split
+        kwargs['lora_B_weights_split'] = lora_B_weights_split
+    elif version in ['v0']:
+        kwargs['x'] = x
     
     if version == 'v0': return _moelinear_fwd_inner_bmm_triton_v0(**kwargs)
-    elif version == 'v1': return _moelinear_fwd_inner_bmm_triton_v1(**kwargs)
-    elif version == 'v2': return _moelinear_fwd_inner_bmm_triton_v2(**kwargs)
-    elif version == 'v3': return _moelinear_fwd_inner_bmm_triton_v3(**kwargs)
-    elif version == 'v4': return _moelinear_fwd_inner_bmm_triton_v4(**kwargs)
+    elif version == 'v1': return MoeLinear_Inner_Bmm_Triton_v1.apply(**kwargs)
+    elif version == 'v2': return MoeLinear_Inner_Bmm_Triton_v2.apply(**kwargs)
+    elif version == 'v3': return MoeLinear_Inner_Bmm_Triton_v3.apply(**kwargs)
+    elif version == 'v4': return MoeLinear_Inner_Bmm_Triton_v4.apply(**kwargs)
     else: raise NotImplementedError(f"Unknown version {version} for moelinear_fwd_inner_bmm_triton")
