@@ -59,6 +59,10 @@ We highlight the statistically dominant LoRA selected by MeteoRA in token level 
       python create_dataset.py --task <task_name>
       ```
 
+   **We also uploaded dataset used in our paper with the JSONL format to Huggingface.co. One could find it [here](https://huggingface.co/datasets/NJUDeepEngine/meteora_dataset).**
+
+
+
 3. Prepare *composite-n* tasks. Refer to our paper for the definition of *composite-n* tasks. Generate these tasks using:
       ```shell
       python create_composite.py --n <n>
